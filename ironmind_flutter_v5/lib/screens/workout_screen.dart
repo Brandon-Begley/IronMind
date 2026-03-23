@@ -471,17 +471,20 @@ class _RecordsTabState extends State<_RecordsTab> {
   }
 
   void _show1RM() {
-    final wC = TextEditingController(); final rC = TextEditingController();
+    final wC = TextEditingController(); 
+    final rC = TextEditingController();
+    String result = '';
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: IronMindTheme.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
-        String result = '';
         void calc() {
           final w = double.tryParse(wC.text) ?? 0; 
           final r = int.tryParse(rC.text) ?? 0;
           if (w > 0 && r > 0) {
             set(() => result = '~${ApiService.calculate1RM(w, r).round()}lb');
+          } else {
+            set(() => result = '');
           }
         }
         return Padding(
