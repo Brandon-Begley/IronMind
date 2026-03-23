@@ -42,15 +42,49 @@ class ApiService {
 
   // ── Personal Records ─────────────────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getPRs() async {
-    final res = await http.get(Uri.parse('$baseUrl/api/prs'));
-    if (res.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(res.body));
-    throw Exception('Failed to load PRs');
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/api/prs')).timeout(const Duration(seconds: 3));
+      if (res.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+    } catch (_) {}
+    
+    // Fallback to local storage
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('prs') ?? '[]';
+    return List<Map<String, dynamic>>.from(jsonDecode(raw));
   }
 
   static Future<Map<String, dynamic>> savePR(Map<String, dynamic> pr) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/prs'), headers: {'Content-Type': 'application/json'}, body: jsonEncode(pr));
-    if (res.statusCode == 200) return jsonDecode(res.body);
-    throw Exception('Failed to save PR');
+    // Save locally first
+    final prefs = await SharedPreferences.getInstance();
+    final existing = await getPRs();
+    existing.add(pr);
+    await prefs.setString('prs', jsonEncode(existing));
+    
+    // Try to sync to server
+    try {
+      final res = await http.post(Uri.parse('$baseUrl/api/prs'), 
+        headers: {'Content-Type': 'application/json'}, 
+        body: jsonEncode(pr)
+      ).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 200) return jsonDecode(res.body);
+    } catch (_) {}
+    
+    return pr;
+  }
+  
+  // Get last PR for a specific exercise
+  static Future<Map<String, dynamic>?> getLastPRForExercise(String exercise) async {
+    final prs = await getPRs();
+    final matching = prs.where((p) => (p['exercise'] as String?)?.toLowerCase() == exercise.toLowerCase()).toList();
+    if (matching.isEmpty) return null;
+    matching.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+    return matching.first;
+  }
+  
+  // Check if a weight is a new PR
+  static Future<bool> isNewPR(String exercise, double weight) async {
+    final lastPR = await getLastPRForExercise(exercise);
+    return lastPR == null || weight > (lastPR['weight'] as num);
   }
 
   // ── Progress ─────────────────────────────────────────────────────────────────

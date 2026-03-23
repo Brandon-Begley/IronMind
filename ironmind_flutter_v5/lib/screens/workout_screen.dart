@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:file_picker/file_picker.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../services/api_service.dart';
+import '../services/csv_service.dart';
 
 class WorkoutScreen extends StatefulWidget {
   final bool connected;
@@ -38,6 +40,50 @@ class _WorkoutScreenState extends State<WorkoutScreen> with SingleTickerProvider
   void _startWorkout() {
     setState(() { _workoutActive = true; _elapsed = 0; _exercises.clear(); _exercises.add(_ExerciseEntry()); });
     _timer = Timer.periodic(const Duration(seconds: 1), (_) { if (mounted) setState(() => _elapsed++); });
+  }
+
+  void _showRoutineSelection() async {
+    final routines = await ApiService.getRoutines();
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: IronMindTheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('SELECT ROUTINE', style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 22, letterSpacing: 2)),
+          const SizedBox(height: 16),
+          ...routines.map((r) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: IronButton(
+              label: r['name'] as String,
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() {
+                  _workoutName = r['name'];
+                  _workoutFocus = (r['primary'] as List?)?.join(', ') ?? '';
+                  _exercises.clear();
+                  for (final ex in r['exercises'] as List) {
+                    _exercises.add(_ExerciseEntry(name: ex as String));
+                  }
+                  if (_exercises.isNotEmpty) {
+                    _workoutActive = true;
+                    _elapsed = 0;
+                    _timer = Timer.periodic(const Duration(seconds: 1), (_) { if (mounted) setState(() => _elapsed++); });
+                  }
+                });
+              },
+            ),
+          )),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () { Navigator.pop(ctx); _startWorkout(); },
+            style: OutlinedButton.styleFrom(foregroundColor: IronMindTheme.text2, side: BorderSide(color: IronMindTheme.border2)),
+            child: Text('START EMPTY', style: GoogleFonts.dmMono(fontSize: 12)),
+          ),
+        ]),
+      ),
+    );
   }
 
   void _finishWorkout() async {
@@ -76,7 +122,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> with SingleTickerProvider
                     child: Text('FINISH', style: GoogleFonts.bebasNeue(fontSize: 14, letterSpacing: 1)),
                   )
                 : ElevatedButton(
-                    onPressed: _startWorkout,
+                    onPressed: _showRoutineSelection,
                     style: ElevatedButton.styleFrom(backgroundColor: IronMindTheme.accent, foregroundColor: IronMindTheme.bg, padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6), minimumSize: Size.zero, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
                     child: Text('START', style: GoogleFonts.bebasNeue(fontSize: 14, letterSpacing: 1)),
                   ),
@@ -134,7 +180,11 @@ class _ActiveWorkoutTab extends StatelessWidget {
   );
 }
 
-class _ExerciseEntry { String name = ''; List<_SetEntry> sets = [_SetEntry()]; }
+class _ExerciseEntry { 
+  String name; 
+  List<_SetEntry> sets;
+  _ExerciseEntry({this.name = '', List<_SetEntry>? sets}) : sets = sets ?? [_SetEntry()];
+}
 class _SetEntry {
   double weight = 0; int reps = 0; bool done = false;
   final TextEditingController weightCtrl = TextEditingController();
@@ -397,13 +447,56 @@ class _RoutinesTabState extends State<_RoutinesTab> {
     );
   }
 
+  void _importCSV() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+      
+      final file = result.files.first;
+      if (file.bytes == null) return;
+
+      final csvContent = String.fromCharCodes(file.bytes!);
+      final routines = await CSVService.parseRoutineCSV(csvContent);
+      
+      for (final routine in routines) {
+        await ApiService.saveRoutine(routine);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imported ${routines.length} routine(s)!'), backgroundColor: IronMindTheme.green),
+        );
+      }
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: $e'), backgroundColor: IronMindTheme.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator(color: IronMindTheme.accent));
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       child: Column(children: [
-        IronButton(label: '+ CREATE ROUTINE', onPressed: _showCreate),
+        Row(children: [
+          Expanded(child: IronButton(label: '+ CREATE ROUTINE', onPressed: _showCreate)),
+          const SizedBox(width: 10),
+          ElevatedButton(
+            onPressed: _importCSV,
+            style: ElevatedButton.styleFrom(backgroundColor: IronMindTheme.accent, foregroundColor: IronMindTheme.bg, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12), minimumSize: Size.zero, elevation: 0),
+            child: const Icon(Icons.upload_file, size: 20),
+          ),
+        ]),
         const SizedBox(height: 12),
         ..._routines.asMap().entries.map((entry) {
           final r = entry.value;
@@ -515,34 +608,139 @@ class _RecordsTabState extends State<_RecordsTab> {
   }
 
   void _showAddPR() {
-    final eC = TextEditingController(); final wC = TextEditingController(); final rC = TextEditingController();
+    final eC = TextEditingController(); 
+    final wC = TextEditingController(); 
+    final rC = TextEditingController();
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: IronMindTheme.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 16, left: 16, right: 16, top: 20),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('LOG PR', style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 22, letterSpacing: 2)),
-          const SizedBox(height: 14),
-          TextField(controller: eC, style: GoogleFonts.dmSans(color: IronMindTheme.textPrimary, fontSize: 13), decoration: const InputDecoration(labelText: 'Exercise')),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: TextField(controller: wC, keyboardType: TextInputType.number, style: GoogleFonts.dmMono(color: IronMindTheme.textPrimary, fontSize: 13), decoration: const InputDecoration(labelText: 'Weight (lbs)'))),
-            const SizedBox(width: 10),
-            Expanded(child: TextField(controller: rC, keyboardType: TextInputType.number, style: GoogleFonts.dmMono(color: IronMindTheme.textPrimary, fontSize: 13), decoration: const InputDecoration(labelText: 'Reps'))),
-          ]),
-          const SizedBox(height: 14),
-          IronButton(label: 'SAVE PR', onPressed: () async {
-            if (eC.text.isEmpty || wC.text.isEmpty || rC.text.isEmpty) return;
-            try {
-              await ApiService.savePR({'exercise': eC.text, 'weight': double.parse(wC.text), 'reps': int.parse(rC.text), 'date': DateTime.now().toIso8601String().split('T')[0], 'notes': ''});
-              Navigator.pop(ctx); _load();
-            } catch (_) { Navigator.pop(ctx); }
-          }),
-          const SizedBox(height: 8),
-        ]),
-      ),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+        Map<String, dynamic>? lastPR;
+        bool isNewPR = false;
+        
+        void checkPR() async {
+          final exercise = eC.text.trim();
+          final weight = double.tryParse(wC.text) ?? 0;
+          
+          if (exercise.isNotEmpty && weight > 0) {
+            lastPR = await ApiService.getLastPRForExercise(exercise);
+            isNewPR = weight > ((lastPR?['weight'] as num?) ?? 0);
+            set(() {});
+          }
+        }
+        
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 16, left: 16, right: 16, top: 20),
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('LOG PR', style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 22, letterSpacing: 2)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: eC, 
+                style: GoogleFonts.dmSans(color: IronMindTheme.textPrimary, fontSize: 13), 
+                decoration: const InputDecoration(labelText: 'Exercise'),
+                onChanged: (_) => checkPR(),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: TextField(
+                  controller: wC, 
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true), 
+                  style: GoogleFonts.dmMono(color: IronMindTheme.textPrimary, fontSize: 13), 
+                  decoration: const InputDecoration(labelText: 'Weight (lbs)'),
+                  onChanged: (_) => checkPR(),
+                )),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(
+                  controller: rC, 
+                  keyboardType: TextInputType.number, 
+                  style: GoogleFonts.dmMono(color: IronMindTheme.textPrimary, fontSize: 13), 
+                  decoration: const InputDecoration(labelText: 'Reps'),
+                  onChanged: (_) => checkPR(),
+                )),
+              ]),
+              if (lastPR != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isNewPR ? IronMindTheme.greenDim : IronMindTheme.surface2,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isNewPR ? IronMindTheme.green : IronMindTheme.border),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(
+                      isNewPR ? '🔥 NEW PR!' : 'Previous PR',
+                      style: GoogleFonts.bebasNeue(
+                        color: isNewPR ? IronMindTheme.green : IronMindTheme.text2,
+                        fontSize: 12,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${lastPR!['weight']}lb × ${lastPR!['reps']}',
+                      style: GoogleFonts.dmMono(color: IronMindTheme.textPrimary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'From ${_daysSince(lastPR!['date'] as String)}',
+                      style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 10),
+                    ),
+                  ]),
+                ),
+              ],
+              const SizedBox(height: 14),
+              IronButton(label: 'SAVE PR', onPressed: () async {
+                if (eC.text.isEmpty || wC.text.isEmpty || rC.text.isEmpty) return;
+                try {
+                  await ApiService.savePR({
+                    'exercise': eC.text,
+                    'weight': double.parse(wC.text),
+                    'reps': int.parse(rC.text),
+                    'date': DateTime.now().toIso8601String().split('T')[0],
+                    'notes': ''
+                  });
+                  Navigator.pop(ctx);
+                  _load();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(isNewPR ? '🔥 New PR!' : 'PR logged!'),
+                        backgroundColor: isNewPR ? IronMindTheme.green : IronMindTheme.accent,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e'), backgroundColor: IronMindTheme.red),
+                    );
+                  }
+                  Navigator.pop(ctx);
+                }
+              }),
+              const SizedBox(height: 8),
+            ]),
+          ),
+        );
+      }),
     );
+  }
+  
+  String _daysSince(String dateStr) {
+    try {
+      final date = DateTime.parse(dateStr);
+      final now = DateTime.now();
+      final diff = now.difference(date).inDays;
+      if (diff == 0) return 'today';
+      if (diff == 1) return 'yesterday';
+      if (diff < 7) return '$diff days ago';
+      if (diff < 30) return '${(diff / 7).ceil()} weeks ago';
+      return '${(diff / 30).ceil()} months ago';
+    } catch (_) {
+      return 'unknown';
+    }
   }
 
   @override
