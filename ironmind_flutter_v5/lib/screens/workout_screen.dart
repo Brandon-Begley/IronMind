@@ -478,29 +478,34 @@ class _RecordsTabState extends State<_RecordsTab> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
         String result = '';
         void calc() {
-          final w = double.tryParse(wC.text) ?? 0; final r = int.tryParse(rC.text) ?? 0;
-          if (w > 0 && r > 0) set(() => result = '~${ApiService.calculate1RM(w, r).round()}lb');
+          final w = double.tryParse(wC.text) ?? 0; 
+          final r = int.tryParse(rC.text) ?? 0;
+          if (w > 0 && r > 0) {
+            set(() => result = '~${ApiService.calculate1RM(w, r).round()}lb');
+          }
         }
         return Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 20, left: 20, right: 20, top: 20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('1RM CALCULATOR', style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 22, letterSpacing: 2)),
-            const SizedBox(height: 16),
-            Row(children: [
-              Expanded(child: TextField(controller: wC, keyboardType: const TextInputType.numberWithOptions(decimal: true), style: GoogleFonts.dmMono(color: IronMindTheme.textPrimary, fontSize: 13), decoration: const InputDecoration(labelText: 'Weight (lbs)'), onChanged: (_) => calc())),
-              const SizedBox(width: 12),
-              Expanded(child: TextField(controller: rC, keyboardType: TextInputType.number, style: GoogleFonts.dmMono(color: IronMindTheme.textPrimary, fontSize: 13), decoration: const InputDecoration(labelText: 'Reps'), onChanged: (_) => calc())),
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('1RM CALCULATOR', style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 22, letterSpacing: 2)),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: TextField(controller: wC, keyboardType: const TextInputType.numberWithOptions(decimal: true), style: GoogleFonts.dmMono(color: IronMindTheme.textPrimary, fontSize: 13), decoration: const InputDecoration(labelText: 'Weight (lbs)'), onChanged: (_) => calc())),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: rC, keyboardType: TextInputType.number, style: GoogleFonts.dmMono(color: IronMindTheme.textPrimary, fontSize: 13), decoration: const InputDecoration(labelText: 'Reps'), onChanged: (_) => calc())),
+              ]),
+              if (result.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Center(child: Column(children: [
+                  Text('ESTIMATED 1RM', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 11, letterSpacing: 1)),
+                  Text(result, style: GoogleFonts.bebasNeue(color: IronMindTheme.accent, fontSize: 52, letterSpacing: 2)),
+                  Text('Epley formula', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9)),
+                ])),
+              ],
+              const SizedBox(height: 8),
             ]),
-            if (result.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Center(child: Column(children: [
-                Text('ESTIMATED 1RM', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 11, letterSpacing: 1)),
-                Text(result, style: GoogleFonts.bebasNeue(color: IronMindTheme.accent, fontSize: 52, letterSpacing: 2)),
-                Text('Epley formula', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9)),
-              ])),
-            ],
-            const SizedBox(height: 8),
-          ]),
+          ),
         );
       }),
     );
