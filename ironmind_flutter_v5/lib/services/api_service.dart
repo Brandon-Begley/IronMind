@@ -281,6 +281,6 @@ class ApiService {
   static double calculate1RM(double weight, int reps) {
     if (reps <= 0) return weight;
     if (reps == 1) return weight;
-    return weight * (1 + reps / 30);
+    return weight / (1.0278 - 0.0278 * reps);
   }
 }

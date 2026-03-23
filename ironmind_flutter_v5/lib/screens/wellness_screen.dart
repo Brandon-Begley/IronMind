@@ -233,7 +233,7 @@ class _BodyweightTabState extends State<_BodyweightTab> {
               lineBarsData: [LineChartBarData(
                 spots: _log.asMap().entries.map((e) => FlSpot(e.key.toDouble(), (e.value['weight'] as num).toDouble())).toList(),
                 isCurved: true, color: IronMindTheme.orange, barWidth: 2,
-                dotData: FlDotData(getDotPainter: (_, _, _, _) => FlDotCirclePainter(radius: 3, color: IronMindTheme.orange, strokeColor: IronMindTheme.bg, strokeWidth: 1)),
+                dotData: FlDotData(getDotPainter: (a, b, c, d) => FlDotCirclePainter(radius: 3, color: IronMindTheme.orange, strokeColor: IronMindTheme.bg, strokeWidth: 1)),
                 belowBarData: BarAreaData(show: true, color: IronMindTheme.orange.withOpacity(0.08)),
               )],
             )))),

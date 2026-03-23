@@ -29,7 +29,7 @@ class IronMindAppBar extends StatelessWidget implements PreferredSizeWidget {
       titleSpacing: 16,
       title: Row(children: [
         Text('IRON', style: GoogleFonts.bebasNeue(color: IronMindTheme.accent, fontSize: 20, letterSpacing: 3)),
-        Text('FOUNDRY', style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 20, letterSpacing: 3)),
+        Text('MIND', style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 20, letterSpacing: 3)),
         const SizedBox(width: 6),
         Container(width: 6, height: 6, decoration: BoxDecoration(
           shape: BoxShape.circle,

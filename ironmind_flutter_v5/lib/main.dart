@@ -25,7 +25,7 @@ class IronMindApp extends StatelessWidget {
   const IronMindApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Iron Foundry',
+    title: 'IronMind',
     debugShowCheckedModeBanner: false,
     theme: IronMindTheme.theme,
     home: const MainShell(),
