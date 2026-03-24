@@ -7,10 +7,20 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
+      - name: Set bundle ID
+        script: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.ironmind.app" ios/Runner/Info.plist
+      - name: Disable code signing in Xcode
+        script: |
+          sed -i '' 's/CODE_SIGN_IDENTITY = .*/CODE_SIGN_IDENTITY = "";/' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_REQUIRED = .*/CODE_SIGNING_REQUIRED = NO;/' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_ALLOWED = .*/CODE_SIGNING_ALLOWED = NO;/' ios/Runner.xcodeproj/project.pbxproj
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build iOS (no codesign)
-        script: flutter build ios --release --no-codesign
+        script: |
+          flutter build ios --release --no-codesign \
+            --dart-define=FLUTTER_TARGET=lib/main.dart
       - name: Package IPA
         script: |
           cd build/ios/iphoneos
