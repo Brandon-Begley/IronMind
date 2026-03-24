@@ -1,0 +1,63 @@
+workflows:
+  android-build:
+    name: Android Build
+    instance_type: linux_default
+    environment:
+      android_sdk: 34
+      xcode: 15.3
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build APK
+        script: flutter build apk --release
+      - name: Build App Bundle
+        script: flutter build appbundle --release
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/bundle/release/*.aab
+    publishing:
+      slack:
+        channel: '#builds'
+        notify_on_build_start: true
+
+  ios-build:
+    name: iOS Build
+    instance_type: mac_mini_m1
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.ironmind
+      xcode: 15.3
+      flutter: 3.19.x
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build iOS
+        script: flutter build ios --release --no-codesign
+      - name: Build IPA
+        script: |
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner \
+            -configuration Release -derivedDataPath ../build/ios_build \
+            -arch arm64 -sdk iphoneos
+    artifacts:
+      - build/ios_build/Build/Products/Release-iphoneos/*.app
+    publishing:
+      slack:
+        channel: '#builds'
+        notify_on_build_start: true
+
+  flutter-test:
+    name: Flutter Tests
+    instance_type: linux_default
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Analyze
+        script: flutter analyze
+      - name: Run tests
+        script: flutter test
+    publishing:
+      slack:
+        channel: '#builds'
+        notify_on_build_start: true
