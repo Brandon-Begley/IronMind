@@ -3,12 +3,6 @@ workflows:
     name: Android Build
     instance_type: linux_x2
     flutter: 3.41.5
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
@@ -19,12 +13,6 @@ workflows:
     name: iOS Build
     instance_type: mac_mini_m1
     flutter: 3.41.5
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
