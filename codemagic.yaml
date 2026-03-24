@@ -1,18 +1,9 @@
 workflows:
-  android-build:
-    name: Android Build
-    instance_type: linux_x2
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Build APK
-        script: flutter build apk --release
-
   ios-build:
     name: iOS Build
     instance_type: mac_mini_m1
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Build iOS
-        script: flutter build ios --debug
+      - name: Build iOS for Device
+        script: flutter build ios --release
