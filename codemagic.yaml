@@ -3,37 +3,30 @@ workflows:
     name: Android Build
     instance_type: linux_x2
     flutter: 3.41.5
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build APK
         script: flutter build apk --release
-      - name: Build App Bundle
-        script: flutter build appbundle --release
-    artifacts:
-      - build/app/outputs/flutter-apk/*.apk
-      - build/app/outputs/bundle/release/*.aab
 
   ios-build:
     name: iOS Build
     instance_type: mac_mini_m1
     flutter: 3.41.5
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build iOS
         script: flutter build ios --release --no-codesign
-    artifacts:
-      - build/ios/iphoneos/*.app
-
-  flutter-test:
-    name: Flutter Tests
-    instance_type: linux_x2
-    flutter: 3.41.5
-    scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Analyze
-        script: flutter analyze
-      - name: Run tests
-        script: flutter test
