@@ -148,8 +148,18 @@ class _TodayTabState extends State<_TodayTab> {
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
-    final f = await ApiService.getFoodLog(widget.date);
-    setState(() { _foods = f; _loading = false; });
+    try {
+      final user = SupabaseService().getCurrentUser();
+      if (user != null) {
+        final meals = await SupabaseService().getUserMealsByDate(user.id, DateTime.parse(widget.date));
+        setState(() { _foods = meals; _loading = false; });
+      } else {
+        setState(() { _loading = false; });
+      }
+    } catch (e) {
+      print('Error loading meals: $e');
+      setState(() { _loading = false; });
+    }
   }
 
   @override
