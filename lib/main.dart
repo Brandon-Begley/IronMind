@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'theme.dart';
 import 'services/api_service.dart';
 import 'services/supabase_service.dart';
+import 'screens/auth_test_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/workout_screen.dart';
 import 'screens/nutrition_screen.dart';
