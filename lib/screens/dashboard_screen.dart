@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import '../services/api_service.dart';
+import '../services/supabase_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final bool connected;
@@ -24,18 +24,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    if (widget.connected) {
-      try {
+    try {
+      final user = SupabaseService().getCurrentUser();
+      if (user != null) {
         final results = await Future.wait([
-          ApiService.getLogs(),
-          ApiService.getPRs(),
-          ApiService.getWellnessToday(),
+          SupabaseService().getUserWorkouts(user.id),
         ]);
         _logs = results[0] as List<Map<String, dynamic>>;
-        _prs = results[1] as List<Map<String, dynamic>>;
-        _wellness = results[2] as Map<String, dynamic>?;
         _calcWeek();
-      } catch (_) {}
+      }
+    } catch (e) {
+      print('Error loading dashboard: $e');
     }
     setState(() => _loading = false);
   }
