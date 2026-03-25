@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/log_meal_dialog.dart';
 import '../services/api_service.dart';
+import '../services/supabase_service.dart';
 
 class NutritionScreen extends StatefulWidget {
   final bool connected;
@@ -103,11 +105,23 @@ class _NutritionScreenState extends State<NutritionScreen> with SingleTickerProv
   }
 
   void _showAddFood() {
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: IronMindTheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) => _AddFoodSheet(date: _today),
-    ).then((_) => setState(() {}));
+    final user = SupabaseService().getCurrentUser();
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to log meals')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => LogMealDialog(
+        userId: user.id,
+        onMealLogged: (meal) {
+          setState(() {});
+        },
+      ),
+    );
   }
 }
 

@@ -5,8 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/log_workout_dialog.dart';
 import '../services/api_service.dart';
 import '../services/csv_service.dart';
+import '../services/supabase_service.dart';
 
 class WorkoutScreen extends StatefulWidget {
   final bool connected;
@@ -348,50 +350,148 @@ class _LogHistoryTab extends StatefulWidget {
 }
 class _LogHistoryTabState extends State<_LogHistoryTab> {
   List<Map<String, dynamic>> _logs = [];
+  List<Map<String, dynamic>> _supabaseLogs = [];
   bool _loading = true;
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() { 
+    super.initState(); 
+    _load(); 
+  }
 
   Future<void> _load() async {
-    try { final l = await ApiService.getLogs(); setState(() { _logs = l; _loading = false; }); }
+    try { 
+      final l = await ApiService.getLogs(); 
+      
+      // Try to load from Supabase if user is authenticated
+      final user = SupabaseService().getCurrentUser();
+      if (user != null) {
+        try {
+          final supabaseLogs = await SupabaseService().getUserWorkouts(user.id);
+          setState(() { 
+            _logs = l; 
+            _supabaseLogs = supabaseLogs;
+            _loading = false; 
+          });
+        } catch (e) {
+          setState(() { _logs = l; _loading = false; });
+        }
+      } else {
+        setState(() { _logs = l; _loading = false; });
+      }
+    }
     catch (_) { setState(() => _loading = false); }
+  }
+
+  void _showLogWorkout() {
+    final user = SupabaseService().getCurrentUser();
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to log workouts')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => LogWorkoutDialog(
+        userId: user.id,
+        onWorkoutLogged: (workout) {
+          _load();
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator(color: IronMindTheme.accent));
-    if (_logs.isEmpty) return const EmptyState(icon: '🏋️', title: 'No Workouts Yet', sub: 'Tap START to log your first workout');
+    
+    // Combine both logs
+    final allLogs = [..._logs, ..._supabaseLogs];
+    
+    if (allLogs.isEmpty) return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const EmptyState(icon: '🏋️', title: 'No Workouts Yet', sub: 'Tap START to log your first workout'),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _showLogWorkout,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: IronMindTheme.accent,
+            ),
+            child: Text(
+              '+ Log with Supabase',
+              style: GoogleFonts.bebasNeue(
+                color: IronMindTheme.bg,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    
     return RefreshIndicator(
       color: IronMindTheme.accent, backgroundColor: IronMindTheme.surface2, onRefresh: _load,
-      child: ListView.builder(
+      child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-        itemCount: _logs.length,
-        itemBuilder: (ctx, i) {
-          final log = _logs[i];
-          final exs = log['exercises'] as List? ?? [];
-          return Dismissible(
-            key: Key('log-${log['id']}'),
-            direction: DismissDirection.endToStart,
-            background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), margin: const EdgeInsets.only(bottom: 10), decoration: BoxDecoration(color: IronMindTheme.redDim, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.delete_outline, color: IronMindTheme.red)),
-            onDismissed: (_) => ApiService.deleteLog(log['id']),
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: IronCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Expanded(child: Text(log['day_name'] ?? 'Workout', style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 18, letterSpacing: 1))),
-                  IronBadge(log['date'] ?? '', color: IronMindTheme.text3),
-                ]),
-                if ((log['focus'] ?? '').isNotEmpty) Text(log['focus'], style: GoogleFonts.dmMono(color: IronMindTheme.accent, fontSize: 10)),
-                if (exs.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  ...exs.take(3).map((ex) => Text('• ${ex['name']} — ${ex['weight']}lb × ${ex['sets']}×${ex['reps']}', style: GoogleFonts.dmMono(color: IronMindTheme.text2, fontSize: 10))),
-                  if (exs.length > 3) Text('+ ${exs.length - 3} more exercises', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9)),
-                ],
-              ])),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: ElevatedButton.icon(
+              onPressed: _showLogWorkout,
+              icon: const Icon(Icons.add),
+              label: Text(
+                'Log Workout',
+                style: GoogleFonts.bebasNeue(letterSpacing: 1),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: IronMindTheme.accent,
+                foregroundColor: IronMindTheme.bg,
+              ),
             ),
-          );
-        },
+          ),
+          ...allLogs.map((log) {
+            final exs = log['exercises'] as List? ?? [];
+            return Dismissible(
+              key: Key('log-${log['id'] ?? log.hashCode}'),
+              direction: DismissDirection.endToStart,
+              background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), margin: const EdgeInsets.only(bottom: 10), decoration: BoxDecoration(color: IronMindTheme.redDim, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.delete_outline, color: IronMindTheme.red)),
+              onDismissed: (_) {
+                if (log['id'] != null && log.containsKey('day_name')) {
+                  ApiService.deleteLog(log['id']);
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: IronCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Expanded(child: Text(
+                      log['day_name'] ?? log['exercise_name'] ?? 'Workout', 
+                      style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 18, letterSpacing: 1),
+                    )),
+                    IronBadge(log['date'] ?? '', color: IronMindTheme.text3),
+                  ]),
+                  if ((log['focus'] ?? '').isNotEmpty) Text(log['focus'], style: GoogleFonts.dmMono(color: IronMindTheme.accent, fontSize: 10)),
+                  if ((log['target_muscle'] ?? '').isNotEmpty) Text('Target: ${log['target_muscle']}', style: GoogleFonts.dmMono(color: IronMindTheme.accent, fontSize: 10)),
+                  if (exs.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    ...exs.take(3).map((ex) => Text('• ${ex['name']} — ${ex['weight']}lb × ${ex['sets']}×${ex['reps']}', style: GoogleFonts.dmMono(color: IronMindTheme.text2, fontSize: 10))),
+                    if (exs.length > 3) Text('+ ${exs.length - 3} more exercises', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9)),
+                  ] else if (log.containsKey('exercise_name')) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      '• ${log['exercise_name']} — ${log['weight']}lb × ${log['sets']}×${log['reps']}',
+                      style: GoogleFonts.dmMono(color: IronMindTheme.text2, fontSize: 10),
+                    ),
+                  ],
+                ])),
+              ),
+            );
+          }).toList(),
+        ],
       ),
     );
   }
