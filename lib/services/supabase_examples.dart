@@ -1,6 +1,7 @@
 // Example Supabase usage patterns for your IronMind app
 
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:typed_data';
 import '../services/supabase_service.dart';
 
 // ============================================
@@ -78,6 +79,10 @@ class DatabaseExample {
   static Future<void> getUserWorkoutsExample() async {
     try {
       final userId = SupabaseService().getCurrentUser()?.id;
+      if (userId == null) {
+        print('User not authenticated');
+        return;
+      }
       final client = SupabaseService.client;
       
       final response = await client
@@ -126,12 +131,16 @@ class StorageExample {
   static Future<void> uploadProfilePictureExample(List<int> imageBytes) async {
     try {
       final userId = SupabaseService().getCurrentUser()?.id;
+      if (userId == null) {
+        print('User not authenticated');
+        return;
+      }
       final path = 'profiles/$userId/profile.jpg';
       
       final imageUrl = await SupabaseService().uploadFile(
         'avatars', // bucket name
         path,
-        imageBytes,
+        Uint8List.fromList(imageBytes),
       );
       print('Image uploaded: $imageUrl');
     } catch (e) {
