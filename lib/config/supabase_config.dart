@@ -1,0 +1,4 @@
+// Supabase configuration
+const String supabaseUrl = 'https://ksbosztywxazcbvmfwpo.supabase.co';
+const String supabaseAnonKey =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtzYm9zenR5d3hhemNidm1md3BvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDk5NDgsImV4cCI6MjA5MDAyNTk0OH0.0LXJQFOFHtOcCoTGOY9rPfQDlgAxryTkndS8gZGAJgY';

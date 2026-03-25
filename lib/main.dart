@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme.dart';
 import 'services/api_service.dart';
+import 'services/supabase_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/workout_screen.dart';
 import 'screens/nutrition_screen.dart';
@@ -12,6 +13,7 @@ import 'screens/profile_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ApiService.loadBaseUrl();
+  await SupabaseService.initialize();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
