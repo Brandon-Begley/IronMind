@@ -78,15 +78,95 @@ class SupabaseService {
     await client.storage.from(bucket).remove([path]);
   }
 
-  // Realtime subscriptions
-  RealtimeChannel realtimeSubscription(String tableName) {
-    return client.channel('public:$tableName').onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: tableName,
-      callback: (payload) {
-        // Handle changes
-      },
-    );
+  // Workout logging
+  Future<Map<String, dynamic>> logWorkout({
+    required String userId,
+    required String exerciseName,
+    required String targetMuscle,
+    required int weight,
+    required int reps,
+    required int sets,
+    required DateTime date,
+  }) async {
+    try {
+      return await client.from('workouts').insert({
+        'user_id': userId,
+        'exercise_name': exerciseName,
+        'target_muscle': targetMuscle,
+        'weight': weight,
+        'reps': reps,
+        'sets': sets,
+        'date': date.toIso8601String(),
+      }).select().single();
+    } catch (e) {
+      throw Exception('Error logging workout: $e');
+    }
   }
-}
+
+  Future<List<Map<String, dynamic>>> getUserWorkouts(String userId) async {
+    try {
+      return await client
+          .from('workouts')
+          .select()
+          .eq('user_id', userId)
+          .order('date', ascending: false);
+    } catch (e) {
+      throw Exception('Error fetching workouts: $e');
+    }
+  }
+
+  // Nutrition logging
+  Future<Map<String, dynamic>> logMeal({
+    required String userId,
+    required String foodName,
+    required double calories,
+    required double protein,
+    required double carbs,
+    required double fats,
+    required double servingSize,
+    required DateTime date,
+  }) async {
+    try {
+      return await client.from('nutrition').insert({
+        'user_id': userId,
+        'food_name': foodName,
+        'calories': calories,
+        'protein': protein,
+        'carbs': carbs,
+        'fats': fats,
+        'serving_size': servingSize,
+        'date': date.toIso8601String(),
+      }).select().single();
+    } catch (e) {
+      throw Exception('Error logging meal: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getUserMeals(String userId) async {
+    try {
+      return await client
+          .from('nutrition')
+          .select()
+          .eq('user_id', userId)
+          .order('date', ascending: false);
+    } catch (e) {
+      throw Exception('Error fetching meals: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getUserMealsByDate(
+    String userId,
+    DateTime date,
+  ) async {
+    try {
+      final dateStr = date.toIso8601String().split('T')[0];
+      return await client
+          .from('nutrition')
+          .select()
+          .eq('user_id', userId)
+          .ilike('date', '$dateStr%')
+          .order('date', ascending: true);
+    } catch (e) {
+      throw Exception('Error fetching meals: $e');
+    }
+  }
