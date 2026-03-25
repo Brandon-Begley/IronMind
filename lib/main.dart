@@ -8,8 +8,6 @@ import 'screens/auth_test_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/workout_screen.dart';
 import 'screens/nutrition_screen.dart';
-import 'screens/wellness_screen.dart';
-import 'screens/profile_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,8 +57,18 @@ class _MainShellState extends State<MainShell> {
       WorkoutScreen(connected: _connected),
       NutritionScreen(connected: _connected),
       DashboardScreen(connected: _connected),
-      WellnessScreen(connected: _connected),
-      ProfileScreen(connected: _connected),
+      const Scaffold(
+        backgroundColor: IronMindTheme.bg,
+        body: Center(
+          child: Text('Wellness screen coming soon (Supabase integration in progress)'),
+        ),
+      ),
+      const Scaffold(
+        backgroundColor: IronMindTheme.bg,
+        body: Center(
+          child: Text('Profile screen coming soon (Supabase integration in progress)'),
+        ),
+      ),
     ];
 
     return Scaffold(
