@@ -3,154 +3,277 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static String baseUrl = 'http://10.0.20.93:3000';
+  // ── Supabase ──────────────────────────────────────────────────────────────────
+  static const String _supabaseUrl = 'https://ksbosztywxazcbvmfwpo.supabase.co';
+  static const String _supabaseKey = 'TwcqLBanG6vAYXvrZ0BiG33gc8mwMzBW9OOaU90m';
 
-  static Future<void> loadBaseUrl() async {
-    final prefs = await SharedPreferences.getInstance();
-    baseUrl = prefs.getString('base_url') ?? 'http://10.0.20.93:3000';
-  }
+  static Map<String, String> get _supaHeaders => {
+    'Content-Type': 'application/json',
+    'apikey': _supabaseKey,
+    'Authorization': 'Bearer $_supabaseKey',
+    'Prefer': 'return=representation',
+  };
 
-  static Future<void> setBaseUrl(String url) async {
-    baseUrl = url.trim().replaceAll(RegExp(r'/$'), '');
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('base_url', baseUrl);
-  }
+  // ── ExerciseDB (RapidAPI) ─────────────────────────────────────────────────────
+  static const String _exerciseDbKey = '04c1239e23msh7a29fc15df9d5c4p178ec0jsn2854acf5e719';
+  static const String _exerciseDbHost = 'exercisedb.p.rapidapi.com';
 
+  static Map<String, String> get _exerciseHeaders => {
+    'X-RapidAPI-Key': _exerciseDbKey,
+    'X-RapidAPI-Host': _exerciseDbHost,
+  };
+
+  // ── USDA Food API ─────────────────────────────────────────────────────────────
+  static const String _usdaKey = 'PASTE_YOUR_USDA_KEY_HERE';
+
+  // ── Connection check ──────────────────────────────────────────────────────────
   static Future<bool> testConnection() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/logs')).timeout(const Duration(seconds: 5));
+      final res = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/workout_logs?limit=1'),
+        headers: _supaHeaders,
+      ).timeout(const Duration(seconds: 5));
       return res.statusCode == 200;
-    } catch (_) { return false; }
+    } catch (_) {
+      return false;
+    }
   }
 
-  // ── Workout Logs ─────────────────────────────────────────────────────────────
+  // ── Workout Logs ──────────────────────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getLogs() async {
-    final res = await http.get(Uri.parse('$baseUrl/api/logs'));
-    if (res.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(res.body));
-    throw Exception('Failed to load logs');
+    try {
+      final res = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/workout_logs?order=created_at.desc&limit=50'),
+        headers: _supaHeaders,
+      );
+      if (res.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+      }
+    } catch (_) {}
+    // Fallback to local
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('workout_logs') ?? '[]';
+    return List<Map<String, dynamic>>.from(jsonDecode(raw));
   }
 
   static Future<Map<String, dynamic>> saveLog(Map<String, dynamic> log) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/logs'), headers: {'Content-Type': 'application/json'}, body: jsonEncode(log));
-    if (res.statusCode == 200) return jsonDecode(res.body);
-    throw Exception('Failed to save log');
+    // Always save locally first
+    final prefs = await SharedPreferences.getInstance();
+    final existing = await getLogs();
+    final localLog = {...log, 'id': DateTime.now().millisecondsSinceEpoch};
+    existing.insert(0, localLog);
+    await prefs.setString('workout_logs', jsonEncode(existing));
+
+    // Sync to Supabase
+    try {
+      final res = await http.post(
+        Uri.parse('$_supabaseUrl/rest/v1/workout_logs'),
+        headers: _supaHeaders,
+        body: jsonEncode(log),
+      );
+      if (res.statusCode == 201) return jsonDecode(res.body)[0];
+    } catch (_) {}
+    return localLog;
   }
 
-  static Future<void> deleteLog(int id) async {
-    await http.delete(Uri.parse('$baseUrl/api/logs/$id'));
+  static Future<void> deleteLog(dynamic id) async {
+    // Remove from local
+    final prefs = await SharedPreferences.getInstance();
+    final logs = await getLogs();
+    logs.removeWhere((l) => l['id'].toString() == id.toString());
+    await prefs.setString('workout_logs', jsonEncode(logs));
+
+    // Delete from Supabase
+    try {
+      await http.delete(
+        Uri.parse('$_supabaseUrl/rest/v1/workout_logs?id=eq.$id'),
+        headers: _supaHeaders,
+      );
+    } catch (_) {}
   }
 
-  // ── Personal Records ─────────────────────────────────────────────────────────
+  // ── Personal Records ──────────────────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getPRs() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/prs')).timeout(const Duration(seconds: 3));
-      if (res.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+      final res = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/personal_records?order=date.desc'),
+        headers: _supaHeaders,
+      );
+      if (res.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+      }
     } catch (_) {}
-    
-    // Fallback to local storage
+    // Fallback to local
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('prs') ?? '[]';
     return List<Map<String, dynamic>>.from(jsonDecode(raw));
   }
 
   static Future<Map<String, dynamic>> savePR(Map<String, dynamic> pr) async {
-    // Save locally first
+    // Calculate e1RM before saving
+    final weight = (pr['weight'] as num).toDouble();
+    final reps = (pr['reps'] as num).toInt();
+    pr['estimated_1rm'] = calculate1RM(weight, reps).round();
+
+    // Save locally
     final prefs = await SharedPreferences.getInstance();
     final existing = await getPRs();
-    existing.add(pr);
+    existing.insert(0, pr);
     await prefs.setString('prs', jsonEncode(existing));
-    
-    // Try to sync to server
+
+    // Sync to Supabase
     try {
-      final res = await http.post(Uri.parse('$baseUrl/api/prs'), 
-        headers: {'Content-Type': 'application/json'}, 
-        body: jsonEncode(pr)
-      ).timeout(const Duration(seconds: 5));
-      if (res.statusCode == 200) return jsonDecode(res.body);
+      final res = await http.post(
+        Uri.parse('$_supabaseUrl/rest/v1/personal_records'),
+        headers: _supaHeaders,
+        body: jsonEncode(pr),
+      );
+      if (res.statusCode == 201) return jsonDecode(res.body)[0];
     } catch (_) {}
-    
     return pr;
   }
-  
-  // Get last PR for a specific exercise
+
   static Future<Map<String, dynamic>?> getLastPRForExercise(String exercise) async {
+    try {
+      final encoded = Uri.encodeComponent(exercise);
+      final res = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/personal_records?exercise=ilike.$encoded&order=date.desc&limit=1'),
+        headers: _supaHeaders,
+      );
+      if (res.statusCode == 200) {
+        final list = jsonDecode(res.body) as List;
+        return list.isNotEmpty ? list.first : null;
+      }
+    } catch (_) {}
     final prs = await getPRs();
     final matching = prs.where((p) => (p['exercise'] as String?)?.toLowerCase() == exercise.toLowerCase()).toList();
     if (matching.isEmpty) return null;
     matching.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
     return matching.first;
   }
-  
-  // Check if a weight is a new PR
+
   static Future<bool> isNewPR(String exercise, double weight) async {
-    final lastPR = await getLastPRForExercise(exercise);
-    return lastPR == null || weight > (lastPR['weight'] as num);
+    final last = await getLastPRForExercise(exercise);
+    return last == null || weight > (last['weight'] as num);
   }
 
-  // ── Progress ─────────────────────────────────────────────────────────────────
-  static Future<List<Map<String, dynamic>>> getProgress(String exercise) async {
-    final res = await http.get(Uri.parse('$baseUrl/api/progress/${Uri.encodeComponent(exercise)}'));
-    if (res.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(res.body));
-    throw Exception('Failed to load progress');
-  }
-
-  // ── Wellness ─────────────────────────────────────────────────────────────────
+  // ── Wellness ──────────────────────────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getWellness() async {
-    final res = await http.get(Uri.parse('$baseUrl/api/wellness'));
-    if (res.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(res.body));
-    throw Exception('Failed to load wellness');
+    try {
+      final res = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/wellness_logs?order=date.desc&limit=30'),
+        headers: _supaHeaders,
+      );
+      if (res.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+    } catch (_) {}
+    return [];
   }
 
   static Future<Map<String, dynamic>?> getWellnessToday() async {
+    final today = DateTime.now().toIso8601String().split('T')[0];
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/wellness/today'));
+      final res = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/wellness_logs?date=eq.$today&limit=1'),
+        headers: _supaHeaders,
+      );
       if (res.statusCode == 200) {
-        final body = res.body.trim();
-        if (body == 'null') return null;
-        return jsonDecode(body);
+        final list = jsonDecode(res.body) as List;
+        return list.isNotEmpty ? list.first : null;
       }
     } catch (_) {}
     return null;
   }
 
   static Future<void> saveWellness(Map<String, dynamic> data) async {
-    await http.post(Uri.parse('$baseUrl/api/wellness'), headers: {'Content-Type': 'application/json'}, body: jsonEncode(data));
+    try {
+      // Upsert — update if today's entry exists, insert if not
+      await http.post(
+        Uri.parse('$_supabaseUrl/rest/v1/wellness_logs'),
+        headers: {..._supaHeaders, 'Prefer': 'resolution=merge-duplicates,return=representation'},
+        body: jsonEncode(data),
+      );
+    } catch (_) {}
   }
 
-  // ── AI Generate ──────────────────────────────────────────────────────────────
+  // ── AI Generate ───────────────────────────────────────────────────────────────
+  // AI generation still needs your backend running — pointing to Supabase Edge Functions
+  // For now keeps working if backend is available, gracefully fails if not
   static Future<String> generateWorkout(String prompt) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/generate'),
-        headers: {'Content-Type': 'application/json'}, body: jsonEncode({'prompt': prompt}));
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body);
-      final content = data['content'] as List;
-      return content.firstWhere((b) => b['type'] == 'text')['text'] ?? '';
-    }
-    throw Exception('Failed to generate');
+    // Try Supabase Edge Function first (set up in Supabase → Edge Functions)
+    try {
+      final res = await http.post(
+        Uri.parse('$_supabaseUrl/functions/v1/generate-workout'),
+        headers: {..._supaHeaders, 'Content-Type': 'application/json'},
+        body: jsonEncode({'prompt': prompt}),
+      ).timeout(const Duration(seconds: 30));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        return data['text'] ?? data['content'] ?? '';
+      }
+    } catch (_) {}
+    return 'AI generation requires a backend connection. Set up a Supabase Edge Function or connect your server in Settings.';
   }
 
-  // ── Nutrition ─────────────────────────────────────────────────────────────────
+  // ── Nutrition Plans ───────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> generateMealPlan({String? goal, int days = 7, String? preferences}) async {
-    final res = await http.post(Uri.parse('$baseUrl/api/nutrition/generate'),
-        headers: {'Content-Type': 'application/json'}, body: jsonEncode({'goal': goal, 'days': days, 'preferences': preferences}));
-    if (res.statusCode == 200) return jsonDecode(res.body);
-    throw Exception('Failed to generate meal plan');
+    try {
+      final res = await http.post(
+        Uri.parse('$_supabaseUrl/functions/v1/generate-meal-plan'),
+        headers: {..._supaHeaders, 'Content-Type': 'application/json'},
+        body: jsonEncode({'goal': goal, 'days': days, 'preferences': preferences}),
+      ).timeout(const Duration(seconds: 30));
+      if (res.statusCode == 200) return jsonDecode(res.body);
+    } catch (_) {}
+    throw Exception('Could not generate meal plan');
   }
 
   static Future<Map<String, dynamic>?> getLatestNutrition() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/nutrition/latest'));
+      final res = await http.get(
+        Uri.parse('$_supabaseUrl/rest/v1/nutrition_plans?order=created_at.desc&limit=1'),
+        headers: _supaHeaders,
+      );
       if (res.statusCode == 200) {
-        final body = res.body.trim();
-        if (body == 'null') return null;
-        return jsonDecode(body);
+        final list = jsonDecode(res.body) as List;
+        return list.isNotEmpty ? list.first : null;
       }
     } catch (_) {}
     return null;
   }
 
-  // ── Open Food Facts ───────────────────────────────────────────────────────────
+  // ── USDA Food Search ──────────────────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> searchFood(String query) async {
+    // Try USDA first
+    try {
+      final res = await http.get(
+        Uri.parse('https://api.nal.usda.gov/fdc/v1/foods/search?query=${Uri.encodeComponent(query)}&pageSize=20&api_key=$_usdaKey'),
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final foods = data['foods'] as List? ?? [];
+        return foods.map<Map<String, dynamic>>((f) {
+          final nutrients = f['foodNutrients'] as List? ?? [];
+          double getNutrient(String name) {
+            final n = nutrients.firstWhere(
+              (n) => (n['nutrientName'] as String?)?.toLowerCase().contains(name.toLowerCase()) == true,
+              orElse: () => {'value': 0},
+            );
+            return (n['value'] as num?)?.toDouble() ?? 0;
+          }
+          return {
+            'name': f['description'] ?? 'Unknown',
+            'brand': f['brandOwner'] ?? f['brandName'] ?? '',
+            'serving': '${f['servingSize'] ?? 100}${f['servingSizeUnit'] ?? 'g'}',
+            'calories': getNutrient('Energy').round(),
+            'protein': getNutrient('Protein'),
+            'carbs': getNutrient('Carbohydrate'),
+            'fat': getNutrient('Total lipid'),
+          };
+        }).where((f) => f['calories'] as int > 0).toList();
+      }
+    } catch (_) {}
+
+    // Fallback to Open Food Facts
     try {
       final encoded = Uri.encodeComponent(query);
       final res = await http.get(Uri.parse(
@@ -177,6 +300,70 @@ class ApiService {
     return [];
   }
 
+  // ── ExerciseDB ────────────────────────────────────────────────────────────────
+  static Future<List<Map<String, dynamic>>> getExercises({
+    String? muscle,
+    String? equipment,
+    String? search,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      String url;
+      if (search != null && search.isNotEmpty) {
+        url = 'https://exercisedb.p.rapidapi.com/exercises/name/${Uri.encodeComponent(search.toLowerCase())}?limit=$limit&offset=$offset';
+      } else if (muscle != null && muscle.isNotEmpty) {
+        url = 'https://exercisedb.p.rapidapi.com/exercises/bodyPart/${Uri.encodeComponent(muscle.toLowerCase())}?limit=$limit&offset=$offset';
+      } else if (equipment != null && equipment.isNotEmpty) {
+        url = 'https://exercisedb.p.rapidapi.com/exercises/equipment/${Uri.encodeComponent(equipment.toLowerCase())}?limit=$limit&offset=$offset';
+      } else {
+        url = 'https://exercisedb.p.rapidapi.com/exercises?limit=$limit&offset=$offset';
+      }
+      final res = await http.get(Uri.parse(url), headers: _exerciseHeaders);
+      if (res.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  static Future<List<String>> getBodyParts() async {
+    try {
+      final res = await http.get(
+        Uri.parse('https://exercisedb.p.rapidapi.com/exercises/bodyPartList'),
+        headers: _exerciseHeaders,
+      );
+      if (res.statusCode == 200) {
+        return List<String>.from(jsonDecode(res.body));
+      }
+    } catch (_) {}
+    return ['back', 'cardio', 'chest', 'lower arms', 'lower legs', 'neck', 'shoulders', 'upper arms', 'upper legs', 'waist'];
+  }
+
+  static Future<List<String>> getEquipmentList() async {
+    try {
+      final res = await http.get(
+        Uri.parse('https://exercisedb.p.rapidapi.com/exercises/equipmentList'),
+        headers: _exerciseHeaders,
+      );
+      if (res.statusCode == 200) {
+        return List<String>.from(jsonDecode(res.body));
+      }
+    } catch (_) {}
+    return ['barbell', 'dumbbell', 'cable', 'machine', 'body weight', 'kettlebell', 'band', 'smith machine'];
+  }
+
+  static Future<Map<String, dynamic>?> getExerciseById(String id) async {
+    try {
+      final res = await http.get(
+        Uri.parse('https://exercisedb.p.rapidapi.com/exercises/exercise/$id'),
+        headers: _exerciseHeaders,
+      );
+      if (res.statusCode == 200) return jsonDecode(res.body);
+    } catch (_) {}
+    return null;
+  }
+
   // ── Food log (local) ──────────────────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getFoodLog(String date) async {
     final prefs = await SharedPreferences.getInstance();
@@ -198,7 +385,7 @@ class ApiService {
     await prefs.setString('food_log_$date', jsonEncode(log));
   }
 
-  // ── Nutrition Targets (user-configurable) ─────────────────────────────────────
+  // ── Nutrition Targets ─────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> getNutritionTargets() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('nutrition_targets');
@@ -211,7 +398,7 @@ class ApiService {
     await prefs.setString('nutrition_targets', jsonEncode(targets));
   }
 
-  // ── Bodyweight (local) ────────────────────────────────────────────────────────
+  // ── Bodyweight (local + Supabase future) ──────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getBodyweightLog() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('bodyweight_log') ?? '[]';
@@ -254,7 +441,6 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('routines');
     if (raw != null) return List<Map<String, dynamic>>.from(jsonDecode(raw));
-    // Default routines
     return [
       {'id': '1', 'name': 'Squat Day', 'primary': ['Quads', 'Glutes'], 'secondary': ['Hamstrings'], 'exercises': ['Back Squat', 'Leg Press', 'Romanian Deadlift', 'Leg Curl', 'Calf Raise']},
       {'id': '2', 'name': 'Bench Day', 'primary': ['Chest'], 'secondary': ['Triceps', 'Front Delts'], 'exercises': ['Bench Press', 'Incline DB Press', 'Tricep Pushdown', 'Lateral Raise']},
@@ -276,11 +462,7 @@ class ApiService {
   static Future<void> saveRoutine(Map<String, dynamic> routine) async {
     final routines = await getRoutines();
     final idx = routines.indexWhere((r) => r['id'] == routine['id']);
-    if (idx >= 0) {
-      routines[idx] = routine;
-    } else {
-      routines.add(routine);
-    }
+    if (idx >= 0) routines[idx] = routine; else routines.add(routine);
     await saveRoutines(routines);
   }
 
@@ -290,19 +472,11 @@ class ApiService {
     final raw = prefs.getString('lifter_profile');
     if (raw != null) return jsonDecode(raw);
     return {
-      'name': '',
-      'experience': 'intermediate',
-      'style': 'powerlifting',
-      'trainingDays': 4.0,
-      'sessionLength': 75.0,
-      'squat': '',
-      'bench': '',
-      'deadlift': '',
-      'ohp': '',
-      'goal': 'peak-strength',
-      'weakpoint': 'none',
-      'equipment': ['Barbell', 'Dumbbells', 'Cable Machine'],
-      'bodyweight': '',
+      'name': '', 'experience': 'intermediate', 'style': 'powerlifting',
+      'trainingDays': 4.0, 'sessionLength': 75.0,
+      'squat': '', 'bench': '', 'deadlift': '', 'ohp': '',
+      'goal': 'peak-strength', 'weakpoint': 'none',
+      'equipment': ['Barbell', 'Dumbbells', 'Cable Machine'], 'bodyweight': '',
     };
   }
 
@@ -311,7 +485,7 @@ class ApiService {
     await prefs.setString('lifter_profile', jsonEncode(profile));
   }
 
-  // ── 1RM Calculator ────────────────────────────────────────────────────────────
+  // ── 1RM Calculator (Brzycki formula) ─────────────────────────────────────────
   static double calculate1RM(double weight, int reps) {
     if (reps <= 0) return weight;
     if (reps == 1) return weight;
