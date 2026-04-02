@@ -57,6 +57,26 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> _continueOffline() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await AuthService.continueOfflinePreview();
+      if (!mounted) return;
+      widget.onAuthenticated();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = _isSignUp ? 'Create Account' : 'Welcome Back';
@@ -157,6 +177,29 @@ class _AuthScreenState extends State<AuthScreen> {
                                     _isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN',
                                     style: GoogleFonts.bebasNeue(fontSize: 20, letterSpacing: 1.5),
                                   ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: _isLoading ? null : _continueOffline,
+                            child: Text(
+                              'CONTINUE OFFLINE',
+                              style: GoogleFonts.bebasNeue(
+                                fontSize: 18,
+                                letterSpacing: 1.4,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Offline preview uses local app storage so you can keep testing while Supabase auth is being finalized.',
+                          style: GoogleFonts.dmSans(
+                            color: IronMindColors.textMuted,
+                            fontSize: 12,
+                            height: 1.45,
                           ),
                         ),
                       ],
