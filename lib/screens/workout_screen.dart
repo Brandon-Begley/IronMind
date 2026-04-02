@@ -14,9 +14,7 @@ class WorkoutScreen extends StatefulWidget {
   State<WorkoutScreen> createState() => _WorkoutScreenState();
 }
 
-class _WorkoutScreenState extends State<WorkoutScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabs;
+class _WorkoutScreenState extends State<WorkoutScreen> {
   bool _workoutActive = false;
   int _elapsed = 0;
   Timer? _timer;
@@ -29,12 +27,10 @@ class _WorkoutScreenState extends State<WorkoutScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
-    _tabs.dispose();
     _timer?.cancel();
     super.dispose();
   }
@@ -73,6 +69,84 @@ class _WorkoutScreenState extends State<WorkoutScreen>
 
   void _startEmptyWorkout() {
     _beginWorkout();
+  }
+
+  void _showStartWorkoutSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: IronMindTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'START WORKOUT',
+              style: GoogleFonts.bebasNeue(
+                color: IronMindTheme.textPrimary,
+                fontSize: 22,
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Kick off a blank session or pull your first exercise from the library.',
+              style: GoogleFonts.dmSans(
+                color: IronMindTheme.text2,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _startEmptyWorkout();
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: IronMindTheme.textPrimary,
+                  side: BorderSide(color: IronMindTheme.border2),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  'START BLANK SESSION',
+                  style: GoogleFonts.bebasNeue(
+                    fontSize: 18,
+                    letterSpacing: 1.3,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _openExerciseLibrary();
+                },
+                child: Text(
+                  'PICK FROM EXERCISE LIBRARY',
+                  style: GoogleFonts.bebasNeue(
+                    fontSize: 18,
+                    letterSpacing: 1.3,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _startRoutine(Map<String, dynamic> routine) {
@@ -116,8 +190,6 @@ class _WorkoutScreenState extends State<WorkoutScreen>
     final parts = <String>[];
     if ((profile['bodyweight'] ?? '').toString().isNotEmpty)
       parts.add('Bodyweight: ${profile['bodyweight']}lb');
-    if ((profile['startWeight'] ?? '').toString().isNotEmpty)
-      parts.add('Starting weight: ${profile['startWeight']}lb');
     if ((profile['goalWeight'] ?? '').toString().isNotEmpty)
       parts.add('Target weight: ${profile['goalWeight']}lb');
     if ((profile['squat'] ?? '').toString().isNotEmpty)
@@ -424,84 +496,381 @@ class _WorkoutScreenState extends State<WorkoutScreen>
                 : const SizedBox.shrink(),
           ),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-            child: Container(
-              decoration: BoxDecoration(
-                color: IronMindTheme.surface2,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: IronMindTheme.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.18),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: TabBar(
-                controller: _tabs,
-                indicator: BoxDecoration(
-                  color: IronMindTheme.accent,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                indicatorSize: TabBarIndicatorSize.tab,
-                labelColor: IronMindTheme.bg,
-                unselectedLabelColor: IronMindTheme.text2,
-                labelStyle: GoogleFonts.dmMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-                unselectedLabelStyle: GoogleFonts.dmMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                ),
-                padding: const EdgeInsets.all(4),
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                tabs: const [
-                  Tab(text: 'Log'),
-                  Tab(text: 'Records'),
-                ],
-              ),
+      ),
+      body: _workoutActive
+          ? _ActiveWorkoutTab(
+              sessionPlan: _sessionPlan,
+              exercises: _exercises,
+              onNameChanged: (v) => setState(() => _workoutName = v),
+              onFocusChanged: (v) => setState(() => _workoutFocus = v),
+              onAddExercise: () =>
+                  setState(() => _exercises.add(_ExerciseEntry())),
+              onUpdate: () => setState(() {}),
+              onOpenOneRepMax: () => _showOneRepMaxCalculator(context),
+            )
+          : _WorkoutHomeTab(
+              key: ValueKey('workout-log-$_routineRefreshTick'),
+              onStartEmptyWorkout: _showStartWorkoutSheet,
+              onCreateRoutine: _showCreateRoutineSheet,
+              onStartRoutine: _startRoutine,
+              onOpenAiGenerator: _showAiWorkoutPrompt,
             ),
-          ),
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabs,
-        children: [
-          _workoutActive
-              ? _ActiveWorkoutTab(
-                  sessionPlan: _sessionPlan,
-                  exercises: _exercises,
-                  onNameChanged: (v) => setState(() => _workoutName = v),
-                  onFocusChanged: (v) => setState(() => _workoutFocus = v),
-                  onAddExercise: () =>
-                      setState(() => _exercises.add(_ExerciseEntry())),
-                  onUpdate: () => setState(() {}),
-                )
-              : _LogHistoryTab(
-                  key: ValueKey('workout-log-$_routineRefreshTick'),
-                  onStartEmptyWorkout: _startEmptyWorkout,
-                  onCreateRoutine: _showCreateRoutineSheet,
-                  onStartRoutine: _startRoutine,
-                ),
-          const _RecordsTab(),
-        ],
-      ),
     );
   }
 }
 
 // ── Active Workout ────────────────────────────────────────────────────────────
+Future<void> _showOneRepMaxCalculator(BuildContext context) async {
+  final wC = TextEditingController();
+  final rC = TextEditingController();
+  const formulas = {
+    'Epley': 'epley',
+    'Brzycki': 'brzycki',
+    'McGlothin': 'mcglothin',
+    'Lombardi': 'lombardi',
+  };
+  Map<String, int> results = {};
+
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, set) {
+        void calc() {
+          final w = double.tryParse(wC.text) ?? 0;
+          final r = int.tryParse(rC.text) ?? 0;
+          if (w > 0 && r > 0) {
+            set(() {
+              results = {
+                for (final entry in formulas.entries)
+                  entry.key: ApiService.calculate1RM(w, r, entry.value).round(),
+              };
+            });
+          } else {
+            set(() => results = {});
+          }
+        }
+
+        return Dialog(
+          backgroundColor: IronMindTheme.surface,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              left: 20,
+              right: 20,
+              top: 20,
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '1RM CALCULATOR',
+                            style: GoogleFonts.bebasNeue(
+                              color: IronMindTheme.textPrimary,
+                              fontSize: 22,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          icon: const Icon(Icons.close),
+                          color: IronMindTheme.text2,
+                          tooltip: 'Close',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: wC,
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
+                            style: GoogleFonts.dmMono(
+                              color: IronMindTheme.textPrimary,
+                              fontSize: 13,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Weight (lbs)',
+                            ),
+                            onChanged: (_) => calc(),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: rC,
+                            keyboardType: TextInputType.number,
+                            style: GoogleFonts.dmMono(
+                              color: IronMindTheme.textPrimary,
+                              fontSize: 13,
+                            ),
+                            decoration: const InputDecoration(labelText: 'Reps'),
+                            onChanged: (_) => calc(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (results.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              'ESTIMATED 1RM RANGE',
+                              style: GoogleFonts.dmMono(
+                                color: IronMindTheme.text3,
+                                fontSize: 11,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            Text(
+                              '~${results.values.reduce((a, b) => a > b ? a : b)}lb',
+                              style: GoogleFonts.bebasNeue(
+                                color: IronMindTheme.accent,
+                                fontSize: 52,
+                                letterSpacing: 2,
+                              ),
+                            ),
+                            Text(
+                              'Highest estimate from the formulas below',
+                              style: GoogleFonts.dmMono(
+                                color: IronMindTheme.text3,
+                                fontSize: 9,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      ...results.entries.map(
+                        (entry) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: IronMindTheme.surface2,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: IronMindTheme.border),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    entry.key,
+                                    style: GoogleFonts.dmSans(
+                                      color: IronMindTheme.textPrimary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '~${entry.value}lb',
+                                  style: GoogleFonts.dmMono(
+                                    color: IronMindTheme.accent,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+class _OneRepMaxBanner extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _OneRepMaxBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF10202F), Color(0xFF173C56)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: IronMindTheme.accent.withOpacity(0.35)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: IronMindTheme.accent.withOpacity(0.16),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.calculate_outlined,
+                  color: IronMindTheme.accent,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '1RM CALCULATOR',
+                      style: GoogleFonts.bebasNeue(
+                        color: IronMindTheme.textPrimary,
+                        fontSize: 19,
+                        letterSpacing: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Check your estimated max anytime while you plan or log a session.',
+                      style: GoogleFonts.dmSans(
+                        color: IronMindTheme.text2,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'OPEN',
+                style: GoogleFonts.dmMono(
+                  color: IronMindTheme.accent,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiWorkoutBanner extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AiWorkoutBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF24111F), Color(0xFF442659)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: IronMindTheme.purple.withOpacity(0.35)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: IronMindTheme.purple.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: IronMindTheme.purple,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AI SUGGESTED WORKOUT',
+                      style: GoogleFonts.bebasNeue(
+                        color: IronMindTheme.textPrimary,
+                        fontSize: 22,
+                        letterSpacing: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Build a session around your goal, target muscle groups, and available equipment.',
+                      style: GoogleFonts.dmSans(
+                        color: IronMindTheme.text2,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrHighlight {
+  final String exercise;
+  final double weight;
+  final int reps;
+  final int estimatedOneRepMax;
+
+  const _PrHighlight({
+    required this.exercise,
+    required this.weight,
+    required this.reps,
+    required this.estimatedOneRepMax,
+  });
+}
+
 class _ActiveWorkoutTab extends StatelessWidget {
   final String sessionPlan;
   final List<_ExerciseEntry> exercises;
   final ValueChanged<String> onNameChanged, onFocusChanged;
   final VoidCallback onAddExercise, onUpdate;
+  final VoidCallback? onOpenOneRepMax;
   const _ActiveWorkoutTab({
     required this.sessionPlan,
     required this.exercises,
@@ -509,6 +878,7 @@ class _ActiveWorkoutTab extends StatelessWidget {
     required this.onFocusChanged,
     required this.onAddExercise,
     required this.onUpdate,
+    this.onOpenOneRepMax,
   });
 
   @override
@@ -574,6 +944,22 @@ class _ActiveWorkoutTab extends StatelessWidget {
             child: _ExerciseCard(
               entry: e.value,
               onUpdate: onUpdate,
+              onPr: (highlight) {
+                final weightLabel = highlight.weight.truncateToDouble() ==
+                        highlight.weight
+                    ? highlight.weight.toStringAsFixed(0)
+                    : highlight.weight.toStringAsFixed(1);
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'New PR: ${highlight.exercise} ${weightLabel}lb x ${highlight.reps} | e1RM ~${highlight.estimatedOneRepMax}lb',
+                    ),
+                    backgroundColor: IronMindTheme.green,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              },
               onRemove: exercises.length > 1
                   ? () {
                       exercises.removeAt(e.key);
@@ -601,6 +987,7 @@ class _SetEntry {
   double weight = 0;
   int reps = 0;
   bool done = false;
+  bool prTracked = false;
   final TextEditingController weightCtrl = TextEditingController();
   final TextEditingController repsCtrl = TextEditingController();
 }
@@ -608,10 +995,12 @@ class _SetEntry {
 class _ExerciseCard extends StatefulWidget {
   final _ExerciseEntry entry;
   final VoidCallback onUpdate;
+  final ValueChanged<_PrHighlight> onPr;
   final VoidCallback? onRemove;
   const _ExerciseCard({
     required this.entry,
     required this.onUpdate,
+    required this.onPr,
     this.onRemove,
   });
   @override
@@ -622,6 +1011,26 @@ class _ExerciseCardState extends State<_ExerciseCard> {
   Timer? _restTimer;
   int _restSeconds = 0;
   bool _resting = false;
+
+  Future<void> _handleCompletedSet(_SetEntry set) async {
+    final exercise = widget.entry.name.trim();
+    if (set.prTracked || exercise.isEmpty || set.weight <= 0 || set.reps <= 0) {
+      return;
+    }
+
+    final isNewPr = await ApiService.checkAndSavePR(exercise, set.weight, set.reps);
+    set.prTracked = true;
+    if (!mounted || !isNewPr) return;
+
+    widget.onPr(
+      _PrHighlight(
+        exercise: exercise,
+        weight: set.weight,
+        reps: set.reps,
+        estimatedOneRepMax: ApiService.calculate1RM(set.weight, set.reps).round(),
+      ),
+    );
+  }
 
   void _startRest(int s) {
     _restTimer?.cancel();
@@ -861,7 +1270,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () {
+                    onTap: () async {
                       setState(() => s.done = !s.done);
                       if (s.done) {
                         HapticFeedback.mediumImpact();
@@ -877,7 +1286,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                               duration: const Duration(seconds: 2),
                             ),
                           );
+                          await _handleCompletedSet(s);
                         }
+                      } else {
+                        s.prTracked = false;
                       }
                     },
                     child: SizedBox(
@@ -1035,6 +1447,156 @@ class _ExerciseCardState extends State<_ExerciseCard> {
 }
 
 // ── Log History ───────────────────────────────────────────────────────────────
+class _WorkoutHomeTab extends StatefulWidget {
+  final VoidCallback onStartEmptyWorkout;
+  final VoidCallback onCreateRoutine;
+  final ValueChanged<Map<String, dynamic>> onStartRoutine;
+  final VoidCallback onOpenAiGenerator;
+
+  const _WorkoutHomeTab({
+    super.key,
+    required this.onStartEmptyWorkout,
+    required this.onCreateRoutine,
+    required this.onStartRoutine,
+    required this.onOpenAiGenerator,
+  });
+
+  @override
+  State<_WorkoutHomeTab> createState() => _WorkoutHomeTabState();
+}
+
+class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
+  List<Map<String, dynamic>> _routines = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final routines = await ApiService.getRoutines();
+      setState(() {
+        _routines = routines;
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: IronMindTheme.accent),
+      );
+    }
+
+    return RefreshIndicator(
+      color: IronMindTheme.accent,
+      backgroundColor: IronMindTheme.surface2,
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+        children: [
+          _AiWorkoutBanner(onTap: widget.onOpenAiGenerator),
+          const SizedBox(height: 12),
+          _OneRepMaxBanner(onTap: () => _showOneRepMaxCalculator(context)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: widget.onStartEmptyWorkout,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: IronMindTheme.textPrimary,
+                    side: BorderSide(color: IronMindTheme.border2),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'START EMPTY WORKOUT',
+                    style: GoogleFonts.bebasNeue(
+                      fontSize: 16,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: widget.onCreateRoutine,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: IronMindTheme.accent,
+                    side: BorderSide(
+                      color: IronMindTheme.accent.withOpacity(0.35),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'NEW ROUTINE',
+                    style: GoogleFonts.bebasNeue(
+                      fontSize: 16,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SectionHeader(title: 'Routines'),
+          const SizedBox(height: 10),
+          if (_routines.isEmpty)
+            IronCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No routines yet',
+                    style: GoogleFonts.bebasNeue(
+                      color: IronMindTheme.textPrimary,
+                      fontSize: 20,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Create a routine from the exercise library to keep your go-to sessions here.',
+                    style: GoogleFonts.dmSans(
+                      color: IronMindTheme.text2,
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._routines.map(
+              (routine) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _RoutineCard(
+                  routine: routine,
+                  onStart: () => widget.onStartRoutine(routine),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _LogHistoryTab extends StatefulWidget {
   final VoidCallback onStartEmptyWorkout;
   final VoidCallback onCreateRoutine;
@@ -1089,28 +1651,59 @@ class _LogHistoryTabState extends State<_LogHistoryTab> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Center(
-                  child: SizedBox(
-                    width: 300,
-                    height: 56,
-                    child: IronButton(
-                      label: 'START EMPTY WORKOUT',
-                      onPressed: widget.onStartEmptyWorkout,
+          _AiWorkoutBanner(onTap: widget.onStartEmptyWorkout),
+          const SizedBox(height: 12),
+          _OneRepMaxBanner(onTap: () => _showOneRepMaxCalculator(context)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: widget.onStartEmptyWorkout,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: IronMindTheme.textPrimary,
+                    side: BorderSide(color: IronMindTheme.border2),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'START EMPTY',
+                    style: GoogleFonts.bebasNeue(
+                      fontSize: 16,
+                      letterSpacing: 1.2,
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: widget.onCreateRoutine,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: IronMindTheme.accent,
+                    side: BorderSide(
+                      color: IronMindTheme.accent.withOpacity(0.35),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'NEW ROUTINE',
+                    style: GoogleFonts.bebasNeue(
+                      fontSize: 16,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
           SectionHeader(title: 'Routines'),
-          const SizedBox(height: 10),
-          IronButton(label: '+ NEW ROUTINE', onPressed: widget.onCreateRoutine),
           const SizedBox(height: 10),
           if (_routines.isEmpty)
             IronCard(
@@ -2011,7 +2604,6 @@ class _LifterProfileTabState extends State<_LifterProfileTab> {
   bool _loaded = false, _saving = false;
   final _nameCtrl = TextEditingController();
   final _bwCtrl = TextEditingController();
-  final _startWeightCtrl = TextEditingController();
   final _targetWeightCtrl = TextEditingController();
   final _squatCtrl = TextEditingController();
   final _benchCtrl = TextEditingController();
@@ -2030,7 +2622,6 @@ class _LifterProfileTabState extends State<_LifterProfileTab> {
       _p = p;
       _nameCtrl.text = p['name'] ?? '';
       _bwCtrl.text = p['bodyweight'] ?? '';
-      _startWeightCtrl.text = p['startWeight'] ?? '';
       _targetWeightCtrl.text = p['goalWeight'] ?? '';
       _squatCtrl.text = p['squat'] ?? '';
       _benchCtrl.text = p['bench'] ?? '';
@@ -2045,7 +2636,6 @@ class _LifterProfileTabState extends State<_LifterProfileTab> {
     _p['name'] = _nameCtrl.text;
     _p['bodyweight'] = _bwCtrl.text;
     _p['weight'] = _bwCtrl.text;
-    _p['startWeight'] = _startWeightCtrl.text;
     _p['goalWeight'] = _targetWeightCtrl.text;
     _p['squat'] = _squatCtrl.text;
     _p['bench'] = _benchCtrl.text;
@@ -2164,42 +2754,19 @@ class _LifterProfileTabState extends State<_LifterProfileTab> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _startWeightCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        style: GoogleFonts.dmMono(
-                          color: IronMindTheme.textPrimary,
-                          fontSize: 13,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Starting Weight',
-                          suffixText: 'lbs',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _targetWeightCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        style: GoogleFonts.dmMono(
-                          color: IronMindTheme.textPrimary,
-                          fontSize: 13,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Target Weight',
-                          suffixText: 'lbs',
-                        ),
-                      ),
-                    ),
-                  ],
+                TextField(
+                  controller: _targetWeightCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  style: GoogleFonts.dmMono(
+                    color: IronMindTheme.textPrimary,
+                    fontSize: 13,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Target Weight',
+                    suffixText: 'lbs',
+                  ),
                 ),
               ],
             ),
@@ -2370,7 +2937,6 @@ class _LifterProfileTabState extends State<_LifterProfileTab> {
   void dispose() {
     _nameCtrl.dispose();
     _bwCtrl.dispose();
-    _startWeightCtrl.dispose();
     _targetWeightCtrl.dispose();
     _squatCtrl.dispose();
     _benchCtrl.dispose();
@@ -2439,8 +3005,6 @@ class _AITabState extends State<_AITab> {
       parts.add('Name: ${_profile['name']}');
     if ((_profile['bodyweight'] ?? '').isNotEmpty)
       parts.add('Bodyweight: ${_profile['bodyweight']}lb');
-    if ((_profile['startWeight'] ?? '').isNotEmpty)
-      parts.add('Starting weight: ${_profile['startWeight']}lb');
     if ((_profile['goalWeight'] ?? '').isNotEmpty)
       parts.add('Target weight: ${_profile['goalWeight']}lb');
     if ((_profile['squat'] ?? '').isNotEmpty)
@@ -2669,7 +3233,7 @@ Future<void> _showRoutineBuilderSheet(
   required VoidCallback onCreated,
 }) async {
   final nameCtrl = TextEditingController();
-  final exCtrl = TextEditingController();
+  final selectedExercises = <String>[];
 
   await showModalBottomSheet(
     context: context,
@@ -2678,80 +3242,144 @@ Future<void> _showRoutineBuilderSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (ctx) => Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-        left: 16,
-        right: 16,
-        top: 20,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'CREATE ROUTINE',
-            style: GoogleFonts.bebasNeue(
-              color: IronMindTheme.textPrimary,
-              fontSize: 22,
-              letterSpacing: 2,
-            ),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setModalState) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          left: 16,
+          right: 16,
+          top: 20,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'CREATE ROUTINE',
+                style: GoogleFonts.bebasNeue(
+                  color: IronMindTheme.textPrimary,
+                  fontSize: 22,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: nameCtrl,
+                style: GoogleFonts.dmSans(
+                  color: IronMindTheme.textPrimary,
+                  fontSize: 13,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Routine Name',
+                  hintText: 'e.g. Push Day',
+                ),
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await showModalBottomSheet(
+                    context: ctx,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (libraryCtx) => FractionallySizedBox(
+                      heightFactor: 0.92,
+                      child: ExerciseLibraryScreen(
+                        onAddToWorkout: (exerciseName) {
+                          if (!selectedExercises.contains(exerciseName)) {
+                            setModalState(() => selectedExercises.add(exerciseName));
+                          }
+                          Navigator.pop(libraryCtx);
+                        },
+                      ),
+                    ),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: IronMindTheme.accent,
+                  side: BorderSide(
+                    color: IronMindTheme.accent.withOpacity(0.35),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.menu_book_outlined, size: 18),
+                label: Text(
+                  'ADD FROM LIBRARY',
+                  style: GoogleFonts.bebasNeue(
+                    fontSize: 16,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (selectedExercises.isEmpty)
+                Text(
+                  'Pick exercises from the library to build this routine.',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindTheme.text2,
+                    fontSize: 12,
+                  ),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: selectedExercises
+                      .map(
+                        (exercise) => InputChip(
+                          label: Text(exercise),
+                          onDeleted: () {
+                            setModalState(() => selectedExercises.remove(exercise));
+                          },
+                          deleteIconColor: IronMindTheme.text2,
+                          selected: true,
+                          selectedColor: IronMindTheme.accentDim,
+                          side: BorderSide(
+                            color: IronMindTheme.accent.withOpacity(0.35),
+                          ),
+                          labelStyle: GoogleFonts.dmSans(
+                            color: IronMindTheme.textPrimary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              const SizedBox(height: 16),
+              IronButton(
+                label: 'CREATE ROUTINE',
+                onPressed: () async {
+                  if (nameCtrl.text.trim().isEmpty || selectedExercises.isEmpty) {
+                    return;
+                  }
+                  await ApiService.saveRoutine({
+                    'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                    'name': nameCtrl.text.trim(),
+                    'exercises': selectedExercises,
+                    'primary': [],
+                    'secondary': [],
+                  });
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                  }
+                  onCreated();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
           ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: nameCtrl,
-            style: GoogleFonts.dmSans(
-              color: IronMindTheme.textPrimary,
-              fontSize: 13,
-            ),
-            decoration: const InputDecoration(
-              labelText: 'Routine Name',
-              hintText: 'e.g. Push Day',
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: exCtrl,
-            maxLines: 3,
-            style: GoogleFonts.dmSans(
-              color: IronMindTheme.textPrimary,
-              fontSize: 13,
-            ),
-            decoration: const InputDecoration(
-              labelText: 'Exercises (one per line)',
-              hintText: 'Bench Press\nIncline Dumbbell Press\nLateral Raise',
-            ),
-          ),
-          const SizedBox(height: 14),
-          IronButton(
-            label: 'CREATE ROUTINE',
-            onPressed: () async {
-              if (nameCtrl.text.trim().isEmpty) return;
-              final exercises = exCtrl.text
-                  .split('\n')
-                  .where((exercise) => exercise.trim().isNotEmpty)
-                  .toList();
-              await ApiService.saveRoutine({
-                'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                'name': nameCtrl.text.trim(),
-                'exercises': exercises,
-                'primary': [],
-                'secondary': [],
-              });
-              if (ctx.mounted) {
-                Navigator.pop(ctx);
-              }
-              onCreated();
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
+        ),
       ),
     ),
   );
 
   nameCtrl.dispose();
-  exCtrl.dispose();
 }
 
 class _RoutineCard extends StatelessWidget {

@@ -23,10 +23,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _wellness;
   bool _loading = true;
   int _weekSessions = 0;
-  int _monthSessions = 0;
   double _weekVolume = 0;
-  double _monthVolume = 0;
-  double _avgSessionVolume = 0;
 
   @override
   void initState() {
@@ -59,29 +56,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _calcMetrics() {
     final now = DateTime.now();
     final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    final monthStart = now.subtract(const Duration(days: 30));
     final weekLogs = _logs.where((log) {
       final date = DateTime.tryParse(log['date']?.toString() ?? '');
       if (date == null) return false;
       return date.isAfter(weekStart.subtract(const Duration(days: 1)));
     }).toList();
-    final monthLogs = _logs.where((log) {
-      final date = DateTime.tryParse(log['date']?.toString() ?? '');
-      if (date == null) return false;
-      return date.isAfter(monthStart);
-    }).toList();
 
     _weekSessions = weekLogs.length;
-    _monthSessions = monthLogs.length;
     _weekVolume = weekLogs.fold<double>(0, (sum, log) => sum + _logVolume(log));
-    _monthVolume = monthLogs.fold<double>(
-      0,
-      (sum, log) => sum + _logVolume(log),
-    );
-    _avgSessionVolume = _logs.isEmpty
-        ? 0
-        : _logs.fold<double>(0, (sum, log) => sum + _logVolume(log)) /
-              _logs.length;
   }
 
   double _logVolume(Map<String, dynamic> log) {
@@ -112,23 +94,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   double _goalLift(String key) => _toDouble(_goals[key]);
 
-  int _exerciseCount() {
-    return _logs.fold<int>(0, (sum, log) {
-      final exercises = log['exercises'] as List? ?? [];
-      return sum + exercises.length;
-    });
-  }
-
-  int _totalSets() {
-    return _logs.fold<int>(0, (sum, log) {
-      final exercises = log['exercises'] as List? ?? [];
-      return sum +
-          exercises.fold<int>(0, (exerciseSum, exercise) {
-            return exerciseSum + ((exercise['sets'] ?? 0) as num).toInt();
-          });
-    });
-  }
-
   double _currentBodyweight() {
     if (_bodyweightLogs.isNotEmpty) {
       final sorted = [..._bodyweightLogs]
@@ -144,19 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return _toDouble(_profile['bodyweight'] ?? _profile['weight']);
   }
 
-  double _startBodyweight() => _toDouble(_profile['startWeight']);
-
   double _goalBodyweight() => _toDouble(_profile['goalWeight']);
-
-  String _weightDeltaLabel() {
-    final current = _currentBodyweight();
-    final start = _startBodyweight();
-    if (current <= 0 || start <= 0) return 'No baseline yet';
-    final delta = current - start;
-    if (delta.abs() < 0.1) return 'No change yet';
-    final prefix = delta > 0 ? '+' : '';
-    return '$prefix${delta.toStringAsFixed(1)} lbs from start';
-  }
 
   String _weightGoalLabel() {
     final current = _currentBodyweight();
@@ -164,17 +117,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (current <= 0 || goal <= 0) return 'Set a target weight';
     final delta = goal - current;
     if (delta.abs() < 0.1) return 'Goal reached';
-    if (delta > 0) return '${delta.toStringAsFixed(1)} lbs to target';
-    return '${delta.abs().toStringAsFixed(1)} lbs above target';
-  }
-
-  double _bodyweightProgress() {
-    final start = _startBodyweight();
-    final goal = _goalBodyweight();
-    final current = _currentBodyweight();
-    final span = (goal - start).abs();
-    if (start <= 0 || goal <= 0 || current <= 0 || span == 0) return 0;
-    return ((current - start).abs() / span).clamp(0.0, 1.0);
+    if (delta > 0) return '${delta.toStringAsFixed(1)} lbs away from goal';
+    return '${delta.abs().toStringAsFixed(1)} lbs away from goal';
   }
 
   @override
@@ -208,9 +152,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     const SectionHeader(title: 'This Week'),
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
+                    /*
+                    IronCard(
+                      child: Column(
+                        children: [
+                          _StrengthProgressRow(
                           child: StatCard(
                             label: 'Sessions',
                             value: '$_weekSessions',
@@ -239,64 +185,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    const SectionHeader(title: 'Workout Stats'),
-                    const SizedBox(height: 10),
+                    */
                     Row(
                       children: [
                         Expanded(
                           child: StatCard(
-                            label: '30 Days',
-                            value: '$_monthSessions',
-                            sub: 'sessions',
+                            label: 'Sessions',
+                            value: '$_weekSessions',
                             valueColor: IronMindTheme.accent,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: StatCard(
-                            label: 'Avg Volume',
-                            value: _formatVol(_avgSessionVolume),
-                            sub: 'per session',
+                            label: 'Volume',
+                            value: _formatVol(_weekVolume),
+                            sub: 'lbs lifted',
                             valueColor: IronMindTheme.green,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: StatCard(
-                            label: 'Total Sets',
-                            value: '${_totalSets()}',
-                            sub: '${_exerciseCount()} exercises',
+                            label: 'Mood',
+                            value: _wellness != null
+                                ? '${_wellness!['mood']}/10'
+                                : '--',
                             valueColor: IronMindTheme.blue,
+                            sub: _wellness != null ? 'today' : 'not logged',
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 10),
-                    IronCard(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _DashboardMetric(
-                              label: 'Lifetime Sessions',
-                              value: '${_logs.length}',
-                              sub: _logs.isEmpty
-                                  ? 'Start logging workouts'
-                                  : 'All logged workouts',
-                              color: IronMindTheme.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _DashboardMetric(
-                              label: '30 Day Volume',
-                              value: _formatVol(_monthVolume),
-                              sub: 'lbs moved',
-                              color: IronMindTheme.accent,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                     const SizedBox(height: 20),
                     const SectionHeader(title: 'Strength Progress'),
@@ -338,10 +257,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const SectionHeader(title: 'Bodyweight'),
+                    const SectionHeader(title: 'Bodyweight Progress'),
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
+                    /*
+                    IronCard(
+                      child: Column(
+                        children: [
                         Expanded(
                           child: StatCard(
                             label: 'Current',
@@ -349,7 +270,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ? _currentBodyweight().toStringAsFixed(1)
                                 : '—',
                             sub: _currentBodyweight() > 0
-                                ? 'lbs'
+                                ? 'latest entry'
                                 : 'not logged',
                             valueColor: IronMindTheme.accent,
                           ),
@@ -357,13 +278,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: StatCard(
-                            label: 'Start',
-                            value: _startBodyweight() > 0
-                                ? _startBodyweight().toStringAsFixed(1)
+                            label: 'Progress',
+                            value: _currentBodyweight() > 0 && _goalBodyweight() > 0
+                                ? _weightGoalLabel()
                                 : '—',
-                            sub: _startBodyweight() > 0
-                                ? 'lbs'
-                                : 'set in onboarding',
+                            sub: _currentBodyweight() > 0
+                                ? 'full tracking in wellness'
+                                : 'log current weight',
                             valueColor: IronMindTheme.textPrimary,
                           ),
                         ),
@@ -374,37 +295,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             value: _goalBodyweight() > 0
                                 ? _goalBodyweight().toStringAsFixed(1)
                                 : '—',
-                            sub: _goalBodyweight() > 0 ? 'lbs' : 'set a target',
+                            sub: _goalBodyweight() > 0 ? 'target' : 'set a target',
                             valueColor: IronMindTheme.green,
                           ),
                         ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 10),
+                    */
                     IronCard(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _DashboardMetric(
-                            label: 'Progress',
-                            value: _weightDeltaLabel(),
-                            sub: _weightGoalLabel(),
-                            color: IronMindTheme.textPrimary,
+                          _StrengthProgressRow(
+                            label: 'Bodyweight',
+                            current: _currentBodyweight(),
+                            goal: _goalBodyweight(),
+                            color: IronMindTheme.accent,
                           ),
-                          if (_bodyweightProgress() > 0) ...[
-                            const SizedBox(height: 12),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(99),
-                              child: LinearProgressIndicator(
-                                value: _bodyweightProgress(),
-                                minHeight: 8,
-                                backgroundColor: IronMindTheme.border2,
-                                valueColor: const AlwaysStoppedAnimation<Color>(
-                                  IronMindTheme.accent,
-                                ),
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _currentBodyweight() > 0 && _goalBodyweight() > 0
+                                  ? _weightGoalLabel()
+                                  : 'Track the full bodyweight trend in Wellness',
+                              style: GoogleFonts.dmSans(
+                                color: IronMindTheme.text2,
+                                fontSize: 11,
                               ),
                             ),
-                          ],
+                          ),
                         ],
                       ),
                     ),
@@ -553,51 +473,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-class _DashboardMetric extends StatelessWidget {
-  final String label;
-  final String value;
-  final String sub;
-  final Color color;
-
-  const _DashboardMetric({
-    required this.label,
-    required this.value,
-    required this.sub,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.dmMono(
-            color: IronMindTheme.text3,
-            fontSize: 10,
-            letterSpacing: 1,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: GoogleFonts.bebasNeue(
-            color: color,
-            fontSize: 28,
-            letterSpacing: 1.5,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          sub,
-          style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 11),
-        ),
-      ],
-    );
-  }
-}
-
 class _StrengthProgressRow extends StatelessWidget {
   final String label;
   final double current;
@@ -664,3 +539,4 @@ class _StrengthProgressRow extends StatelessWidget {
     );
   }
 }
+

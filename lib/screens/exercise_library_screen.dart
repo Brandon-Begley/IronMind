@@ -266,7 +266,9 @@ class _ExerciseCard extends StatelessWidget {
           ])),
           if (onAddToWorkout != null)
             GestureDetector(
-              onTap: () { onAddToWorkout!(_capitalize(name)); Navigator.pop(context); },
+              onTap: () {
+                onAddToWorkout!(_capitalize(name));
+              },
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: IronMindTheme.accentDim, borderRadius: BorderRadius.circular(8), border: Border.all(color: IronMindTheme.accent.withOpacity(0.3))),
@@ -368,11 +370,13 @@ class _ExerciseDetailScreen extends StatelessWidget {
 
           // Add to workout button
           if (onAddToWorkout != null)
-            IronButton(label: '+ ADD TO WORKOUT', onPressed: () {
-              onAddToWorkout!(name);
-              Navigator.pop(context);
-              Navigator.pop(context);
-            }),
+            IronButton(
+              label: '+ ADD TO WORKOUT',
+              onPressed: () {
+                onAddToWorkout!(name);
+                Navigator.pop(context);
+              },
+            ),
         ]),
       ),
     );

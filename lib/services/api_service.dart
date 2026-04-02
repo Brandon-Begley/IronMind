@@ -182,6 +182,7 @@ class ApiService {
 
     prs[key] = saved;
     await localStore.setString(await _scopedKey(_prsKey), jsonEncode(prs));
+    await _syncProfileLiftFromPr(exercise, weight);
     return saved;
   }
 
@@ -192,13 +193,29 @@ class ApiService {
         : null;
   }
 
+  static double _prScore(Map<String, dynamic>? pr) {
+    if (pr == null) return 0;
+    final estimated =
+        (pr['estimated1rm'] as num?)?.toDouble() ??
+        (pr['estimated_1rm'] as num?)?.toDouble();
+    if (estimated != null && estimated > 0) return estimated;
+
+    final weight =
+        (pr['weight'] as num?)?.toDouble() ??
+        double.tryParse('${pr['weight']}') ??
+        0;
+    final reps =
+        (pr['reps'] as num?)?.toInt() ?? int.tryParse('${pr['reps']}') ?? 0;
+    return calculate1RM(weight, reps);
+  }
+
   static Future<bool> checkAndSavePR(String exercise, double weight, int reps) async {
     final prs = await getPRs();
     final key = exercise.toLowerCase();
-    final estimated1rm = weight * (1 + reps / 30.0);
+    final estimated1rm = calculate1RM(weight, reps);
     final current = prs[key];
 
-    if (current == null || estimated1rm > (current['estimated1rm'] ?? 0)) {
+    if (current == null || estimated1rm > _prScore(Map<String, dynamic>.from(current as Map))) {
       prs[key] = {
         'exercise': exercise,
         'weight': weight,
@@ -208,9 +225,64 @@ class ApiService {
         'date': DateTime.now().toIso8601String(),
       };
       await localStore.setString(await _scopedKey(_prsKey), jsonEncode(prs));
+      await _syncProfileLiftFromPr(exercise, weight);
       return true;
     }
     return false;
+  }
+
+  static Future<void> _syncProfileLiftFromPr(String exercise, double weight) async {
+    if (weight <= 0) return;
+
+    final mapping = _profileLiftFieldForExercise(exercise);
+    if (mapping == null) return;
+
+    final profile = await getProfile();
+    final currentValue =
+        (profile[mapping.currentKey] as num?)?.toDouble() ??
+        double.tryParse('${profile[mapping.currentKey]}') ??
+        0;
+
+    if (weight <= currentValue) return;
+
+    final formatted = weight % 1 == 0 ? weight.toInt().toString() : weight.toString();
+    profile[mapping.primaryKey] = formatted;
+    profile[mapping.currentKey] = weight;
+    await saveProfile(profile);
+  }
+
+  static _LiftProfileMapping? _profileLiftFieldForExercise(String exercise) {
+    final normalized = exercise.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+
+    if (normalized.contains('deadlift')) {
+      return const _LiftProfileMapping(
+        primaryKey: 'deadlift',
+        currentKey: 'currentDeadlift',
+      );
+    }
+    if (normalized.contains('bench')) {
+      return const _LiftProfileMapping(
+        primaryKey: 'bench',
+        currentKey: 'currentBench',
+      );
+    }
+    if (normalized.contains('overhead press') ||
+        normalized == 'ohp' ||
+        normalized.contains('shoulder press')) {
+      return const _LiftProfileMapping(
+        primaryKey: 'ohp',
+        currentKey: 'currentOhp',
+      );
+    }
+    if (normalized.contains('squat')) {
+      return const _LiftProfileMapping(
+        primaryKey: 'squat',
+        currentKey: 'currentSquat',
+      );
+    }
+
+    return null;
   }
 
   static Future<List<Map<String, dynamic>>> getRoutines() async {
@@ -537,4 +609,14 @@ class ApiService {
     {'name': 'Hip Thrust', 'bodyPart': 'upper legs', 'target': 'glutes', 'equipment': 'barbell'},
     {'name': 'Lunge', 'bodyPart': 'upper legs', 'target': 'quads', 'equipment': 'body weight'},
   ];
+}
+
+class _LiftProfileMapping {
+  final String primaryKey;
+  final String currentKey;
+
+  const _LiftProfileMapping({
+    required this.primaryKey,
+    required this.currentKey,
+  });
 }
