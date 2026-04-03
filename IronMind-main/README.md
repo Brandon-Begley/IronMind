@@ -1,71 +1,64 @@
-# Iron Mind
+# Iron Mind App
 
-Built by Iron Foundry
+This folder contains the active Flutter application for Iron Mind.
 
-Iron Mind is a fitness and discipline tracking app focused on helping people build consistency in both training and daily habits.
+For the high-level product overview and brand description, see the repo root [README](../README.md).
 
-## Vision
+## What Is Here
 
-Most fitness apps focus on tracking. Iron Mind focuses on discipline.
+- Flutter app source in `lib/`
+- Platform projects for `android/`, `ios/`, `macos/`, `linux/`, `windows/`, and `web/`
+- Codemagic config in `codemagic.yaml`
+- Supabase setup notes in `SUPABASE_SETUP.md`
 
-The goal is to give users a simple system they can rely on every day:
-- train
-- track
-- stay consistent
-
-No distractions. No unnecessary features.
-
-## Core Features
-
-- Workout tracking (sets, reps, weight)
-- Progress tracking (body weight, photos)
-- Nutrition tracking
-- Daily check-ins (habits and mindset)
-- Streak tracking for consistency
-
-## Roadmap
-
-- User accounts and authentication
-- Dashboard with daily overview
-- Expanded progress tracking
-- Habit streak system
-- Community and coaching features
-
-## Brand
-
-Iron Mind is part of Iron Foundry.
-
-Iron Foundry represents the idea of building yourself through pressure, consistency, and discipline.
-
-## Status
-
-Early development
-
-## Flutter Setup
+## Local Setup
 
 Use Flutter `3.41.x` or newer with Dart `3.11.x` or newer.
 
-For local preview in Chrome:
+Install dependencies:
+
+```bash
+flutter pub get
+```
+
+Enable web support if needed:
 
 ```bash
 flutter config --enable-web
-flutter pub get
+```
+
+## Running The App
+
+For a normal Chrome preview:
+
+```bash
 flutter run -d chrome
 ```
 
-This repo also includes a local runner that uses the bundled SDK:
+This project also includes a local helper script that uses the bundled SDK:
 
 ```powershell
 .\run_chrome.ps1
 ```
 
-That runs the app with Flutter hot reload in Chrome. Saving code in your editor should trigger refreshes, and you can use `r` in the terminal for a manual hot reload.
+## Build Check
 
-If you want to verify the web build before deploying:
+To verify the web build:
 
 ```bash
 flutter build web
 ```
+
+To run analyzer checks:
+
+```bash
+flutter analyze
+```
+
+## Notes
+
+- The active app now lives in this `IronMind-main/` folder.
+- The older `IronMind-push/` folder is only a local backup and is no longer the primary tracked app.
 
 ## Author
 
