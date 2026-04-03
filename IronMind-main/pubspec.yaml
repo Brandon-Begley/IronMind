@@ -4,25 +4,26 @@ publish_to: 'none'
 version: 5.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.11.0 <4.0.0'
+  flutter: '>=3.41.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.1.0
-  fl_chart: ^0.65.0
+  http: ^1.6.0
+  fl_chart: ^1.1.1
   intl: ^0.18.1
-  shared_preferences: ^2.2.2
-  google_fonts:
-    path: vendor/google_fonts_stub
-  cupertino_icons: ^1.0.6
-  percent_indicator: ^4.2.3
+  shared_preferences: ^2.5.5
+  google_fonts: ^8.0.2
+  cupertino_icons: ^1.0.8
+  percent_indicator: ^4.2.5
   csv: ^6.0.0
+  supabase_flutter: ^2.12.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true

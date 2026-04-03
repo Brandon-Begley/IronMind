@@ -31,10 +31,17 @@ class IronMindTheme {
   static const Color text2 = IronMindColors.textSecondary;
   static const Color text3 = IronMindColors.textMuted;
   static const Color green = IronMindColors.success;
+  static const Color greenDim = Color(0x1A47FF8A);
   static const Color blue = IronMindColors.accent;
+  static const Color blueDim = Color(0x1A47B4FF);
   static const Color orange = IronMindColors.warning;
+  static const Color orangeDim = Color(0x1AFFB347);
+  static const Color purple = Color(0xFFB47FFF);
+  static const Color purpleDim = Color(0x1AB47FFF);
   static const Color red = IronMindColors.alert;
   static const Color redDim = Color(0xFF4A1F23);
+
+  static ThemeData get theme => buildIronMindTheme();
 }
 
 ThemeData buildIronMindTheme() {

@@ -21,17 +21,27 @@ workflows:
           cd ios && pod install
       - name: Build unsigned release app
         script: |
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign --config-only --dart-define=EXERCISE_DB_API_KEY=$EXERCISE_DB_API_KEY
+          xcodebuild -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination generic/platform=iOS \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
       - name: Package unsigned IPA for AltServer
         script: |
-          cd build/ios/iphoneos
+          cd build/ios/archive/Runner.xcarchive/Products/Applications
           rm -rf Payload IronMind-AltStore.ipa
           mkdir -p Payload
           cp -R Runner.app Payload/Runner.app
           zip -r IronMind-AltStore.ipa Payload
     artifacts:
-      - build/ios/iphoneos/IronMind-AltStore.ipa
-      - build/ios/iphoneos/Runner.app
+      - build/ios/archive/Runner.xcarchive/Products/Applications/IronMind-AltStore.ipa
+      - build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
 
   ios-unsigned-check:
     name: IronMind iOS Unsigned Check
@@ -55,9 +65,19 @@ workflows:
           cd ios && pod install
       - name: Build unsigned iOS app
         script: |
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign --config-only --dart-define=EXERCISE_DB_API_KEY=$EXERCISE_DB_API_KEY
+          xcodebuild -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination generic/platform=iOS \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
     artifacts:
-      - build/ios/iphoneos/Runner.app
+      - build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
 
   ios-app-store:
     name: IronMind iOS App Store
@@ -94,7 +114,7 @@ workflows:
           xcode-project use-profiles
       - name: Build signed IPA
         script: |
-          flutter build ipa --release --export-method app-store
+          flutter build ipa --release --export-method app-store --dart-define=EXERCISE_DB_API_KEY=$EXERCISE_DB_API_KEY
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log

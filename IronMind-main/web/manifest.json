@@ -1,11 +1,11 @@
 {
-    "name": "ironmind_flutter_v5",
-    "short_name": "ironmind_flutter_v5",
+    "name": "IronMind",
+    "short_name": "IronMind",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Track workouts, nutrition, and daily discipline with IronMind.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

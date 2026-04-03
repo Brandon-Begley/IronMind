@@ -170,3 +170,8 @@ class SupabaseService {
       throw Exception('Error fetching meals: $e');
     }
   }
+
+  RealtimeChannel realtimeSubscription(String tableName) {
+    return client.channel('public:$tableName');
+  }
+}

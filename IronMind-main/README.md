@@ -41,6 +41,32 @@ Iron Foundry represents the idea of building yourself through pressure, consiste
 
 Early development
 
+## Flutter Setup
+
+Use Flutter `3.41.x` or newer with Dart `3.11.x` or newer.
+
+For local preview in Chrome:
+
+```bash
+flutter config --enable-web
+flutter pub get
+flutter run -d chrome
+```
+
+This repo also includes a local runner that uses the bundled SDK:
+
+```powershell
+.\run_chrome.ps1
+```
+
+That runs the app with Flutter hot reload in Chrome. Saving code in your editor should trigger refreshes, and you can use `r` in the terminal for a manual hot reload.
+
+If you want to verify the web build before deploying:
+
+```bash
+flutter build web
+```
+
 ## Author
 
 Brandon Begley

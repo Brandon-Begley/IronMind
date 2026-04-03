@@ -88,12 +88,39 @@ class _NutritionScreenState extends State<NutritionScreen> with SingleTickerProv
             ),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabs,
-          labelColor: IronMindTheme.accent, unselectedLabelColor: IronMindTheme.text3,
-          indicatorColor: IronMindTheme.accent, indicatorSize: TabBarIndicatorSize.tab,
-          labelStyle: GoogleFonts.dmMono(fontSize: 10), unselectedLabelStyle: GoogleFonts.dmMono(fontSize: 10),
-          tabs: const [Tab(text: 'Today'), Tab(text: 'New Plan'), Tab(text: 'My Plans')],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(50),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Container(
+              decoration: BoxDecoration(
+                color: IronMindTheme.surface2,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: IronMindTheme.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.18),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: TabBar(
+                controller: _tabs,
+                indicator: BoxDecoration(
+                  color: IronMindTheme.accent,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: IronMindTheme.bg,
+                unselectedLabelColor: IronMindTheme.text2,
+                labelStyle: GoogleFonts.dmMono(fontSize: 10, fontWeight: FontWeight.w700),
+                unselectedLabelStyle: GoogleFonts.dmMono(fontSize: 10, fontWeight: FontWeight.w500),
+                padding: const EdgeInsets.all(4),
+                tabs: const [Tab(text: 'Today'), Tab(text: 'New Plan'), Tab(text: 'My Plans')],
+              ),
+            ),
+          ),
         ),
       ),
       body: TabBarView(controller: _tabs, children: [

@@ -147,24 +147,142 @@ class ApiService {
     return Map<String, dynamic>.from(jsonDecode(raw));
   }
 
+  static Future<List<Map<String, dynamic>>> getPRList() async {
+    final prs = await getPRs();
+    final list = prs.values.map((entry) {
+      final item = Map<String, dynamic>.from(entry as Map);
+      if (item['estimated_1rm'] == null && item['estimated1rm'] != null) {
+        item['estimated_1rm'] = item['estimated1rm'];
+      }
+      return item;
+    }).toList();
+    list.sort((a, b) => (b['date']?.toString() ?? '').compareTo(a['date']?.toString() ?? ''));
+    return list;
+  }
+
+  static Future<Map<String, dynamic>> savePR(Map<String, dynamic> pr) async {
+    final prs = await getPRs();
+    final exercise = (pr['exercise'] ?? '').toString().trim();
+    if (exercise.isEmpty) {
+      throw Exception('Exercise is required.');
+    }
+
+    final weight = (pr['weight'] as num?)?.toDouble() ?? double.tryParse('${pr['weight']}') ?? 0;
+    final reps = (pr['reps'] as num?)?.toInt() ?? int.tryParse('${pr['reps']}') ?? 0;
+    final key = exercise.toLowerCase();
+
+    final saved = <String, dynamic>{
+      ...pr,
+      'exercise': exercise,
+      'weight': weight,
+      'reps': reps,
+      'estimated_1rm': calculate1RM(weight, reps).round(),
+      'date': (pr['date'] ?? DateTime.now().toIso8601String().split('T')[0]).toString(),
+    };
+
+    prs[key] = saved;
+    await localStore.setString(await _scopedKey(_prsKey), jsonEncode(prs));
+    await _syncProfileLiftFromPr(exercise, weight);
+    return saved;
+  }
+
+  static Future<Map<String, dynamic>?> getLastPRForExercise(String exercise) async {
+    final prs = await getPRs();
+    return prs[exercise.toLowerCase()] is Map
+        ? Map<String, dynamic>.from(prs[exercise.toLowerCase()] as Map)
+        : null;
+  }
+
+  static double _prScore(Map<String, dynamic>? pr) {
+    if (pr == null) return 0;
+    final estimated =
+        (pr['estimated1rm'] as num?)?.toDouble() ??
+        (pr['estimated_1rm'] as num?)?.toDouble();
+    if (estimated != null && estimated > 0) return estimated;
+
+    final weight =
+        (pr['weight'] as num?)?.toDouble() ??
+        double.tryParse('${pr['weight']}') ??
+        0;
+    final reps =
+        (pr['reps'] as num?)?.toInt() ?? int.tryParse('${pr['reps']}') ?? 0;
+    return calculate1RM(weight, reps);
+  }
+
   static Future<bool> checkAndSavePR(String exercise, double weight, int reps) async {
     final prs = await getPRs();
     final key = exercise.toLowerCase();
-    final estimated1rm = weight * (1 + reps / 30.0);
+    final estimated1rm = calculate1RM(weight, reps);
     final current = prs[key];
 
-    if (current == null || estimated1rm > (current['estimated1rm'] ?? 0)) {
+    if (current == null || estimated1rm > _prScore(Map<String, dynamic>.from(current as Map))) {
       prs[key] = {
         'exercise': exercise,
         'weight': weight,
         'reps': reps,
+        'estimated_1rm': estimated1rm.round(),
         'estimated1rm': estimated1rm,
         'date': DateTime.now().toIso8601String(),
       };
       await localStore.setString(await _scopedKey(_prsKey), jsonEncode(prs));
+      await _syncProfileLiftFromPr(exercise, weight);
       return true;
     }
     return false;
+  }
+
+  static Future<void> _syncProfileLiftFromPr(String exercise, double weight) async {
+    if (weight <= 0) return;
+
+    final mapping = _profileLiftFieldForExercise(exercise);
+    if (mapping == null) return;
+
+    final profile = await getProfile();
+    final currentValue =
+        (profile[mapping.currentKey] as num?)?.toDouble() ??
+        double.tryParse('${profile[mapping.currentKey]}') ??
+        0;
+
+    if (weight <= currentValue) return;
+
+    final formatted = weight % 1 == 0 ? weight.toInt().toString() : weight.toString();
+    profile[mapping.primaryKey] = formatted;
+    profile[mapping.currentKey] = weight;
+    await saveProfile(profile);
+  }
+
+  static _LiftProfileMapping? _profileLiftFieldForExercise(String exercise) {
+    final normalized = exercise.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+
+    if (normalized.contains('deadlift')) {
+      return const _LiftProfileMapping(
+        primaryKey: 'deadlift',
+        currentKey: 'currentDeadlift',
+      );
+    }
+    if (normalized.contains('bench')) {
+      return const _LiftProfileMapping(
+        primaryKey: 'bench',
+        currentKey: 'currentBench',
+      );
+    }
+    if (normalized.contains('overhead press') ||
+        normalized == 'ohp' ||
+        normalized.contains('shoulder press')) {
+      return const _LiftProfileMapping(
+        primaryKey: 'ohp',
+        currentKey: 'currentOhp',
+      );
+    }
+    if (normalized.contains('squat')) {
+      return const _LiftProfileMapping(
+        primaryKey: 'squat',
+        currentKey: 'currentSquat',
+      );
+    }
+
+    return null;
   }
 
   static Future<List<Map<String, dynamic>>> getRoutines() async {
@@ -195,6 +313,12 @@ class ApiService {
 
   static Future<void> saveProfile(Map<String, dynamic> profile) async {
     await localStore.setString(await _scopedKey(_profileKey), jsonEncode(profile));
+  }
+
+  static Future<Map<String, dynamic>> getLifterProfile() async => getProfile();
+
+  static Future<void> saveLifterProfile(Map<String, dynamic> profile) async {
+    await saveProfile(profile);
   }
 
   static Future<Map<String, dynamic>> getStrengthGoals() async {
@@ -359,6 +483,38 @@ class ApiService {
     return plans.first;
   }
 
+  static Future<Map<String, dynamic>?> getWellnessToday() async {
+    final logs = await getWellnessLogs();
+    if (logs.isEmpty) return null;
+    return logs.first;
+  }
+
+  static Future<String> generateWorkout(String prompt) async {
+    final profile = await getProfile();
+    final focus = (profile['goal'] ?? 'strength').toString();
+    final experience = (profile['experience'] ?? 'intermediate').toString();
+    final equipment = List<String>.from(profile['equipment'] ?? const []);
+    final equipmentText = equipment.isEmpty ? 'Standard gym equipment' : equipment.join(', ');
+
+    return [
+      'IRONMIND AI DEMO',
+      '',
+      'Prompt: $prompt',
+      '',
+      'Suggested Focus: $focus',
+      'Experience Level: $experience',
+      'Equipment: $equipmentText',
+      '',
+      '1. Warm up for 8-10 minutes with light cardio and dynamic mobility.',
+      '2. Main lift: 4 working sets of 4-6 reps at a challenging but clean effort.',
+      '3. Secondary lift: 3 sets of 6-8 reps with controlled tempo.',
+      '4. Accessories: 3 movements for 3 sets of 10-15 reps each.',
+      '5. Finish with core work or conditioning for 8-12 minutes.',
+      '',
+      'Use this as a presentation preview. We can reconnect live generation later.',
+    ].join('\n');
+  }
+
   static Future<List<Map<String, dynamic>>> _getNutritionPlans() async {
     final raw = await localStore.getString(await _scopedKey(_nutritionPlansKey));
     if (raw == null) return [];
@@ -453,4 +609,14 @@ class ApiService {
     {'name': 'Hip Thrust', 'bodyPart': 'upper legs', 'target': 'glutes', 'equipment': 'barbell'},
     {'name': 'Lunge', 'bodyPart': 'upper legs', 'target': 'quads', 'equipment': 'body weight'},
   ];
+}
+
+class _LiftProfileMapping {
+  final String primaryKey;
+  final String currentKey;
+
+  const _LiftProfileMapping({
+    required this.primaryKey,
+    required this.currentKey,
+  });
 }

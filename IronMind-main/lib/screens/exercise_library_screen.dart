@@ -41,40 +41,26 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
     });
   }
 
-  // Ensure the routine-library crash fix is applied
-  void _loadExercises({bool reset = false}) async {
+  Future<void> _loadExercises({bool reset = false}) async {
     if (_loading) return;
     if (reset) {
-      setState(() {
-        _exercises = [];
-        _offset = 0;
-        _hasMore = true;
-      });
+      setState(() { _exercises = []; _offset = 0; _hasMore = true; });
     }
     setState(() => _loading = true);
-    try {
-      final results = await ApiService.getExercises(
-        muscle: _selectedBodyPart.isNotEmpty ? _selectedBodyPart : null,
-        equipment: _selectedEquipment.isNotEmpty ? _selectedEquipment : null,
-        search: _searchCtrl.text.isNotEmpty ? _searchCtrl.text : null,
-        limit: 20,
-        offset: _offset,
-      );
-      setState(() {
-        _exercises.addAll(results);
-        _offset += results.length;
-        _hasMore = results.length == 20;
-      });
-    } catch (e) {
-      setState(() {
-        _hasMore = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load exercises: $e')),
-      );
-    } finally {
-      setState(() => _loading = false);
-    }
+    final allResults = await ApiService.getExercises(
+      bodyPart: _selectedBodyPart.isNotEmpty ? _selectedBodyPart : null,
+      equipment: _selectedEquipment.isNotEmpty ? _selectedEquipment : null,
+      query: _searchCtrl.text,
+    );
+    final start = _offset.clamp(0, allResults.length);
+    final end = (start + 20).clamp(0, allResults.length);
+    final results = allResults.sublist(start, end);
+    setState(() {
+      _exercises.addAll(results);
+      _offset += results.length;
+      _hasMore = results.length == 20;
+      _loading = false;
+    });
   }
 
   void _search() => _loadExercises(reset: true);
@@ -198,7 +184,7 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
     );
   }
 
-  String _capitalize(String s) => s.isEmpty ? s : s.split(' ').map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1)).join(' ');
+  String _capitalize(String s) => s.isEmpty ? s : s.split(' ').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
 
   @override
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
@@ -280,7 +266,9 @@ class _ExerciseCard extends StatelessWidget {
           ])),
           if (onAddToWorkout != null)
             GestureDetector(
-              onTap: () { onAddToWorkout!(_capitalize(name)); Navigator.pop(context); },
+              onTap: () {
+                onAddToWorkout!(_capitalize(name));
+              },
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: IronMindTheme.accentDim, borderRadius: BorderRadius.circular(8), border: Border.all(color: IronMindTheme.accent.withOpacity(0.3))),
@@ -382,11 +370,13 @@ class _ExerciseDetailScreen extends StatelessWidget {
 
           // Add to workout button
           if (onAddToWorkout != null)
-            IronButton(label: '+ ADD TO WORKOUT', onPressed: () {
-              onAddToWorkout!(name);
-              Navigator.pop(context);
-              Navigator.pop(context);
-            }),
+            IronButton(
+              label: '+ ADD TO WORKOUT',
+              onPressed: () {
+                onAddToWorkout!(name);
+                Navigator.pop(context);
+              },
+            ),
         ]),
       ),
     );

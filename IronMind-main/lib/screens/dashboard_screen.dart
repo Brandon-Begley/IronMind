@@ -1,23 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:fl_chart/fl_chart.dart';
-import '../theme.dart';
+
 import '../services/api_service.dart';
+import '../theme.dart';
+import '../widgets/common.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final bool connected;
+
+  const DashboardScreen({super.key, this.connected = false});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  Map<String, dynamic> _profile = {};
-  Map<String, dynamic> _prs = {};
-  Map<String, dynamic> _goals = {};
   List<Map<String, dynamic>> _logs = [];
+  List<Map<String, dynamic>> _prs = [];
   List<Map<String, dynamic>> _bodyweightLogs = [];
+  Map<String, dynamic> _profile = {};
+  Map<String, dynamic> _goals = {};
+  Map<String, dynamic>? _wellness;
   bool _loading = true;
+  int _weekSessions = 0;
+  double _weekVolume = 0;
 
   @override
   void initState() {
@@ -26,699 +32,511 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _load() async {
-    final profile = await ApiService.getProfile();
-    final prs = await ApiService.getPRs();
-    final goals = await ApiService.getStrengthGoals();
-    final logs = await ApiService.getLogs();
-    final bwLogs = await ApiService.getBodyweightLogs();
-    setState(() {
-      _profile = profile;
-      _prs = prs;
-      _goals = goals;
-      _logs = logs;
-      _bodyweightLogs = bwLogs;
-      _loading = false;
+    setState(() => _loading = true);
+    try {
+      final results = await Future.wait([
+        ApiService.getLogs(),
+        ApiService.getPRList(),
+        ApiService.getWellnessToday(),
+        ApiService.getProfile(),
+        ApiService.getStrengthGoals(),
+        ApiService.getBodyweightLogs(),
+      ]);
+      _logs = results[0] as List<Map<String, dynamic>>;
+      _prs = results[1] as List<Map<String, dynamic>>;
+      _wellness = results[2] as Map<String, dynamic>?;
+      _profile = results[3] as Map<String, dynamic>;
+      _goals = results[4] as Map<String, dynamic>;
+      _bodyweightLogs = results[5] as List<Map<String, dynamic>>;
+      _calcMetrics();
+    } catch (_) {}
+    setState(() => _loading = false);
+  }
+
+  void _calcMetrics() {
+    final now = DateTime.now();
+    final weekStart = now.subtract(Duration(days: now.weekday - 1));
+    final weekLogs = _logs.where((log) {
+      final date = DateTime.tryParse(log['date']?.toString() ?? '');
+      if (date == null) return false;
+      return date.isAfter(weekStart.subtract(const Duration(days: 1)));
+    }).toList();
+
+    _weekSessions = weekLogs.length;
+    _weekVolume = weekLogs.fold<double>(0, (sum, log) => sum + _logVolume(log));
+  }
+
+  double _logVolume(Map<String, dynamic> log) {
+    final exercises = log['exercises'] as List? ?? [];
+    return exercises.fold<double>(0, (sum, exercise) {
+      return sum +
+          ((exercise['weight'] ?? 0) as num).toDouble() *
+              ((exercise['sets'] ?? 1) as num).toDouble() *
+              ((exercise['reps'] ?? 1) as num).toDouble();
     });
+  }
+
+  String _formatVol(double value) {
+    if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}k';
+    return value.toInt().toString();
+  }
+
+  double _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  double _currentLift(String key, String fallbackKey) {
+    final primary = _toDouble(_profile[key]);
+    if (primary > 0) return primary;
+    return _toDouble(_profile[fallbackKey]);
+  }
+
+  double _goalLift(String key) => _toDouble(_goals[key]);
+
+  double _currentBodyweight() {
+    if (_bodyweightLogs.isNotEmpty) {
+      final sorted = [..._bodyweightLogs]
+        ..sort((a, b) {
+          final aDate =
+              DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(1970);
+          final bDate =
+              DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(1970);
+          return aDate.compareTo(bDate);
+        });
+      return _toDouble(sorted.last['weight']);
+    }
+    return _toDouble(_profile['bodyweight'] ?? _profile['weight']);
+  }
+
+  double _goalBodyweight() => _toDouble(_profile['goalWeight']);
+
+  String _weightGoalLabel() {
+    final current = _currentBodyweight();
+    final goal = _goalBodyweight();
+    if (current <= 0 || goal <= 0) return 'Set a target weight';
+    final delta = goal - current;
+    if (delta.abs() < 0.1) return 'Goal reached';
+    if (delta > 0) return '${delta.toStringAsFixed(1)} lbs away from goal';
+    return '${delta.abs().toStringAsFixed(1)} lbs away from goal';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: IronMindColors.background,
-      body: SafeArea(
-        child: _loading
-            ? const Center(
-                child:
-                    CircularProgressIndicator(color: IronMindColors.accent))
-            : RefreshIndicator(
-                color: IronMindColors.accent,
-                backgroundColor: IronMindColors.surface,
-                onRefresh: _load,
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 20),
-                    _buildQuickStats(),
-                    const SizedBox(height: 20),
-                    _buildStrengthGoals(),
-                    const SizedBox(height: 20),
-                    _buildBodyweightChart(),
-                    const SizedBox(height: 20),
-                    _buildRecentPRs(),
-                    const SizedBox(height: 20),
-                    _buildRecentWorkouts(),
-                  ],
-                ),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    final name = _profile['name'] as String? ?? '';
-    final greeting = _getGreeting();
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name.isEmpty ? greeting.toUpperCase() : '$greeting,'.toUpperCase(),
-                style: GoogleFonts.dmSans(
-                    color: IronMindColors.textSecondary, fontSize: 13),
-              ),
-              if (name.isNotEmpty)
-                Text(name.toUpperCase(),
-                    style: GoogleFonts.bebasNeue(
-                        color: IronMindColors.textPrimary,
-                        fontSize: 28,
-                        letterSpacing: 1.5)),
-            ],
+      backgroundColor: IronMindTheme.bg,
+      appBar: IronMindAppBar(
+        subtitle: 'Dashboard',
+        connected: widget.connected,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 20),
+            color: IronMindTheme.text2,
+            onPressed: _load,
           ),
-        ),
-        RichText(
-          text: TextSpan(children: [
-            TextSpan(
-                text: 'IRON',
-                style: GoogleFonts.bebasNeue(
-                    color: IronMindColors.accent,
-                    fontSize: 22,
-                    letterSpacing: 2)),
-            TextSpan(
-                text: 'MIND',
-                style: GoogleFonts.bebasNeue(
-                    color: IronMindColors.textPrimary,
-                    fontSize: 22,
-                    letterSpacing: 2)),
-          ]),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQuickStats() {
-    final thisWeek = _logs.where((l) {
-      final ts = DateTime.tryParse(l['timestamp'] ?? '');
-      if (ts == null) return false;
-      return DateTime.now().difference(ts).inDays <= 7;
-    }).toList();
-
-    int totalVolume = 0;
-    for (final log in _logs.take(10)) {
-      for (final ex in List<Map<String, dynamic>>.from(
-          log['exercises'] ?? [])) {
-        for (final set
-            in List<Map<String, dynamic>>.from(ex['sets'] ?? [])) {
-          final w = double.tryParse(set['weight']?.toString() ?? '0') ?? 0;
-          final r = int.tryParse(set['reps']?.toString() ?? '0') ?? 0;
-          totalVolume += (w * r).toInt();
-        }
-      }
-    }
-
-    return Row(
-      children: [
-        _StatCard(
-          label: 'THIS WEEK',
-          value: '${thisWeek.length}',
-          unit: 'workouts',
-          icon: Icons.calendar_today_outlined,
-        ),
-        const SizedBox(width: 10),
-        _StatCard(
-          label: 'TOTAL WORKOUTS',
-          value: '${_logs.length}',
-          unit: 'logged',
-          icon: Icons.fitness_center,
-        ),
-        const SizedBox(width: 10),
-        _StatCard(
-          label: 'VOLUME',
-          value: totalVolume > 999
-              ? '${(totalVolume / 1000).toStringAsFixed(1)}k'
-              : '$totalVolume',
-          unit: 'lbs',
-          icon: Icons.bar_chart,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStrengthGoals() {
-    final squat = (_prs['squat']?['weight'] as num?)?.toDouble() ??
-        (_profile['currentSquat'] as num?)?.toDouble() ?? 0;
-    final bench = (_prs['bench press']?['weight'] as num?)?.toDouble() ??
-        (_profile['currentBench'] as num?)?.toDouble() ?? 0;
-    final deadlift = (_prs['deadlift']?['weight'] as num?)?.toDouble() ??
-        (_profile['currentDeadlift'] as num?)?.toDouble() ?? 0;
-    final ohp = (_prs['overhead press']?['weight'] as num?)?.toDouble() ??
-        (_profile['currentOhp'] as num?)?.toDouble() ?? 0;
-
-    final goalSquat = (_goals['squat'] as num?)?.toDouble() ?? 315;
-    final goalBench = (_goals['bench'] as num?)?.toDouble() ?? 225;
-    final goalDead = (_goals['deadlift'] as num?)?.toDouble() ?? 405;
-    final goalOhp = (_goals['ohp'] as num?)?.toDouble() ?? 135;
-
-    return _SectionCard(
-      title: 'STRENGTH GOALS',
-      trailing: GestureDetector(
-        onTap: _editGoals,
-        child: Text('EDIT',
-            style: GoogleFonts.bebasNeue(
-                color: IronMindColors.accent,
-                fontSize: 14,
-                letterSpacing: 1.5)),
-      ),
-      child: Column(
-        children: [
-          _GoalBar(
-              label: 'SQUAT',
-              current: squat,
-              goal: goalSquat,
-              color: IronMindColors.accent),
-          const SizedBox(height: 12),
-          _GoalBar(
-              label: 'BENCH',
-              current: bench,
-              goal: goalBench,
-              color: IronMindColors.success),
-          const SizedBox(height: 12),
-          _GoalBar(
-              label: 'DEADLIFT',
-              current: deadlift,
-              goal: goalDead,
-              color: IronMindColors.accent),
-          const SizedBox(height: 12),
-          _GoalBar(
-              label: 'OHP',
-              current: ohp,
-              goal: goalOhp,
-              color: IronMindColors.warning),
-          const SizedBox(height: 8),
-          Text('Progress bars show current PR vs goal',
-              style: GoogleFonts.dmSans(
-                  color: IronMindColors.textMuted, fontSize: 11)),
         ],
       ),
-    );
-  }
-
-  Widget _buildBodyweightChart() {
-    if (_bodyweightLogs.isEmpty) return const SizedBox.shrink();
-
-    final spots = _bodyweightLogs.asMap().entries.map((e) {
-      final w = (e.value['weight'] as num).toDouble();
-      return FlSpot(e.key.toDouble(), w);
-    }).toList();
-
-    final weights = _bodyweightLogs.map((e) => (e['weight'] as num).toDouble());
-    final minW = weights.reduce((a, b) => a < b ? a : b) - 5;
-    final maxW = weights.reduce((a, b) => a > b ? a : b) + 5;
-
-    return _SectionCard(
-      title: 'BODYWEIGHT',
-      child: Column(
-        children: [
-          SizedBox(
-            height: 140,
-            child: LineChart(
-              LineChartData(
-                gridData: const FlGridData(show: false),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (v, _) => Text(
-                        v.toStringAsFixed(0),
-                        style: GoogleFonts.dmMono(
-                            color: IronMindColors.textMuted, fontSize: 10),
-                      ),
-                    ),
-                  ),
-                  bottomTitles:
-                      const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles:
-                      const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles:
-                      const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                ),
-                borderData: FlBorderData(show: false),
-                minY: minW,
-                maxY: maxW,
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    color: IronMindColors.warning,
-                    barWidth: 2.5,
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-                        radius: 4,
-                        color: IronMindColors.warning,
-                        strokeWidth: 0,
-                      ),
-                    ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: IronMindColors.warning.withOpacity(0.08),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text('Track your bodyweight progress over time.',
-              style: GoogleFonts.dmSans(
-                  color: IronMindColors.textMuted, fontSize: 11)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecentPRs() {
-    if (_prs.isEmpty) return const SizedBox.shrink();
-    final entries = _prs.entries.toList()
-      ..sort((a, b) {
-        final aDate = DateTime.tryParse(a.value['date'] ?? '') ?? DateTime(2000);
-        final bDate = DateTime.tryParse(b.value['date'] ?? '') ?? DateTime(2000);
-        return bDate.compareTo(aDate); // Most recent first
-      });
-
-    return _SectionCard(
-      title: 'PERSONAL RECORDS',
-      trailing: Text('${entries.length} total',
-          style: GoogleFonts.dmSans(
-              color: IronMindColors.textMuted, fontSize: 12)),
-      child: Column(
-        children: entries.take(6).map((e) {
-          final pr = e.value as Map<String, dynamic>;
-          final weight = (pr['weight'] as num?)?.toDouble() ?? 0;
-          final reps = (pr['reps'] as int?) ?? 0;
-          final estimated1rm = ApiService.calculate1RM(weight, reps);
-          final date = DateTime.tryParse(pr['date'] ?? '');
-          final dateStr = date != null
-              ? '${date.month}/${date.day}/${date.year}'
-              : 'Recent';
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: IronMindColors.surfaceElevated,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: IronMindColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(color: IronMindTheme.accent),
+            )
+          : RefreshIndicator(
+              color: IronMindTheme.accent,
+              backgroundColor: IronMindTheme.surface2,
+              onRefresh: _load,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.emoji_events,
-                        color: IronMindColors.warning, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _capitalize(e.key),
-                        style: GoogleFonts.dmSans(
-                            color: IronMindColors.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600),
+                    const SectionHeader(title: 'This Week'),
+                    const SizedBox(height: 10),
+                    /*
+                    IronCard(
+                      child: Column(
+                        children: [
+                          _StrengthProgressRow(
+                          child: StatCard(
+                            label: 'Sessions',
+                            value: '$_weekSessions',
+                            valueColor: IronMindTheme.accent,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: StatCard(
+                            label: 'Volume',
+                            value: _formatVol(_weekVolume),
+                            sub: 'lbs lifted',
+                            valueColor: IronMindTheme.green,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: StatCard(
+                            label: 'Mood',
+                            value: _wellness != null
+                                ? '${_wellness!['mood']}/10'
+                                : '—',
+                            valueColor: IronMindTheme.blue,
+                            sub: _wellness != null ? 'today' : 'not logged',
+                          ),
+                        ),
+                      ],
+                    ),
+                    */
+                    Row(
+                      children: [
+                        Expanded(
+                          child: StatCard(
+                            label: 'Sessions',
+                            value: '$_weekSessions',
+                            valueColor: IronMindTheme.accent,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: StatCard(
+                            label: 'Volume',
+                            value: _formatVol(_weekVolume),
+                            sub: 'lbs lifted',
+                            valueColor: IronMindTheme.green,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: StatCard(
+                            label: 'Mood',
+                            value: _wellness != null
+                                ? '${_wellness!['mood']}/10'
+                                : '--',
+                            valueColor: IronMindTheme.blue,
+                            sub: _wellness != null ? 'today' : 'not logged',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const SectionHeader(title: 'Strength Progress'),
+                    const SizedBox(height: 10),
+                    IronCard(
+                      child: Column(
+                        children: [
+                          _StrengthProgressRow(
+                            label: 'Squat',
+                            current: _currentLift('squat', 'currentSquat'),
+                            goal: _goalLift('squat'),
+                            color: IronMindTheme.accent,
+                          ),
+                          const SizedBox(height: 12),
+                          _StrengthProgressRow(
+                            label: 'Bench',
+                            current: _currentLift('bench', 'currentBench'),
+                            goal: _goalLift('bench'),
+                            color: IronMindTheme.green,
+                          ),
+                          const SizedBox(height: 12),
+                          _StrengthProgressRow(
+                            label: 'Deadlift',
+                            current: _currentLift(
+                              'deadlift',
+                              'currentDeadlift',
+                            ),
+                            goal: _goalLift('deadlift'),
+                            color: IronMindTheme.blue,
+                          ),
+                          const SizedBox(height: 12),
+                          _StrengthProgressRow(
+                            label: 'OHP',
+                            current: _currentLift('ohp', 'currentOhp'),
+                            goal: _goalLift('ohp'),
+                            color: IronMindTheme.orange,
+                          ),
+                        ],
                       ),
                     ),
-                    Text(
-                      '~${estimated1rm.toStringAsFixed(0)} lb 1RM',
-                      style: GoogleFonts.dmMono(
-                          color: IronMindColors.accent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600),
+                    const SizedBox(height: 20),
+                    const SectionHeader(title: 'Bodyweight Progress'),
+                    const SizedBox(height: 10),
+                    /*
+                    IronCard(
+                      child: Column(
+                        children: [
+                        Expanded(
+                          child: StatCard(
+                            label: 'Current',
+                            value: _currentBodyweight() > 0
+                                ? _currentBodyweight().toStringAsFixed(1)
+                                : '—',
+                            sub: _currentBodyweight() > 0
+                                ? 'latest entry'
+                                : 'not logged',
+                            valueColor: IronMindTheme.accent,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: StatCard(
+                            label: 'Progress',
+                            value: _currentBodyweight() > 0 && _goalBodyweight() > 0
+                                ? _weightGoalLabel()
+                                : '—',
+                            sub: _currentBodyweight() > 0
+                                ? 'full tracking in wellness'
+                                : 'log current weight',
+                            valueColor: IronMindTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: StatCard(
+                            label: 'Target',
+                            value: _goalBodyweight() > 0
+                                ? _goalBodyweight().toStringAsFixed(1)
+                                : '—',
+                            sub: _goalBodyweight() > 0 ? 'target' : 'set a target',
+                            valueColor: IronMindTheme.green,
+                          ),
+                        ),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      '${weight.toStringAsFixed(1)} lbs × ${reps} reps',
-                      style: GoogleFonts.dmMono(
-                          color: IronMindColors.textSecondary, fontSize: 13),
+                    */
+                    IronCard(
+                      child: Column(
+                        children: [
+                          _StrengthProgressRow(
+                            label: 'Bodyweight',
+                            current: _currentBodyweight(),
+                            goal: _goalBodyweight(),
+                            color: IronMindTheme.accent,
+                          ),
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _currentBodyweight() > 0 && _goalBodyweight() > 0
+                                  ? _weightGoalLabel()
+                                  : 'Track the full bodyweight trend in Wellness',
+                              style: GoogleFonts.dmSans(
+                                color: IronMindTheme.text2,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 12),
-                    Text(
-                      dateStr,
-                      style: GoogleFonts.dmSans(
-                          color: IronMindColors.textMuted, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildRecentWorkouts() {
-    if (_logs.isEmpty) return const SizedBox.shrink();
-    return _SectionCard(
-      title: 'RECENT WORKOUTS',
-      child: Column(
-        children: _logs.take(3).map((log) {
-          final date = DateTime.tryParse(log['timestamp'] ?? '');
-          final dateStr = date != null
-              ? '${date.month}/${date.day}'
-              : '';
-          final exCount =
-              (log['exercises'] as List? ?? []).length;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: IronMindColors.surfaceElevated,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: IronMindColors.border),
-                  ),
-                  child: const Icon(Icons.fitness_center,
-                      color: IronMindColors.accent, size: 16),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(log['name'] ?? 'Workout',
-                          style: GoogleFonts.dmSans(
-                              color: IronMindColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500)),
-                      Text('$exCount exercises',
-                          style: GoogleFonts.dmSans(
-                              color: IronMindColors.textMuted, fontSize: 11)),
+                    const SizedBox(height: 20),
+                    if (_prs.isNotEmpty) ...[
+                      SectionHeader(
+                        title: 'Top Records',
+                        trailing: IronGhostButton(
+                          label: 'View All',
+                          color: IronMindTheme.text2,
+                          onPressed: () {},
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      IronCard(
+                        padding: EdgeInsets.zero,
+                        child: Column(
+                          children: _prs.take(4).toList().asMap().entries.map((
+                            entry,
+                          ) {
+                            final pr = entry.value;
+                            final isLast =
+                                entry.key == (_prs.take(4).length - 1);
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 11,
+                              ),
+                              decoration: BoxDecoration(
+                                border: isLast
+                                    ? null
+                                    : const Border(
+                                        bottom: BorderSide(
+                                          color: IronMindTheme.border,
+                                        ),
+                                      ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      pr['exercise'] ?? '',
+                                      style: GoogleFonts.dmSans(
+                                        color: IronMindTheme.textPrimary,
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  IronBadge(
+                                    '${pr['weight']}lb x ${pr['reps']}',
+                                    color: IronMindTheme.accent,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  if (pr['estimated_1rm'] != null)
+                                    IronBadge(
+                                      '~${pr['estimated_1rm']}lb',
+                                      color: IronMindTheme.green,
+                                    ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
                     ],
-                  ),
+                    SectionHeader(
+                      title: 'Recent Workouts',
+                      trailing: IronGhostButton(
+                        label: 'View All',
+                        color: IronMindTheme.text2,
+                        onPressed: () {},
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_logs.isEmpty)
+                      const EmptyState(
+                        icon: '◎',
+                        title: 'No Workouts Yet',
+                        sub: 'Start logging in the Workout tab',
+                      )
+                    else
+                      ..._logs.take(3).map((log) {
+                        final exercises = log['exercises'] as List? ?? [];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: IronCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        log['day_name'] ?? 'Workout',
+                                        style: GoogleFonts.bebasNeue(
+                                          color: IronMindTheme.textPrimary,
+                                          fontSize: 18,
+                                          letterSpacing: 1,
+                                        ),
+                                      ),
+                                    ),
+                                    IronBadge(
+                                      log['date'] ?? '',
+                                      color: IronMindTheme.text3,
+                                    ),
+                                  ],
+                                ),
+                                if ((log['focus'] ?? '').isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      log['focus'],
+                                      style: GoogleFonts.dmMono(
+                                        color: IronMindTheme.accent,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                if (exercises.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    exercises
+                                        .take(3)
+                                        .map((exercise) => exercise['name'])
+                                        .join(' · '),
+                                    style: GoogleFonts.dmMono(
+                                      color: IronMindTheme.text3,
+                                      fontSize: 10,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
                 ),
-                Text(dateStr,
-                    style: GoogleFonts.dmMono(
-                        color: IronMindColors.textSecondary, fontSize: 11)),
-              ],
+              ),
             ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  void _editGoals() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _EditGoalsSheet(
-        goals: _goals,
-        onSaved: (updated) async {
-          await ApiService.saveStrengthGoals(updated);
-          _load();
-        },
-      ),
-    );
-  }
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
-
-  String _capitalize(String s) =>
-      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
-}
-
-// ─── Edit Goals Sheet ──────────────────────────────────────
-
-class _EditGoalsSheet extends StatefulWidget {
-  final Map<String, dynamic> goals;
-  final ValueChanged<Map<String, dynamic>> onSaved;
-  const _EditGoalsSheet({required this.goals, required this.onSaved});
-
-  @override
-  State<_EditGoalsSheet> createState() => _EditGoalsSheetState();
-}
-
-class _EditGoalsSheetState extends State<_EditGoalsSheet> {
-  late TextEditingController _squatC;
-  late TextEditingController _benchC;
-  late TextEditingController _deadC;
-  late TextEditingController _ohpC;
-
-  @override
-  void initState() {
-    super.initState();
-    _squatC = TextEditingController(text: '${widget.goals['squat'] ?? 315}');
-    _benchC = TextEditingController(text: '${widget.goals['bench'] ?? 225}');
-    _deadC = TextEditingController(text: '${widget.goals['deadlift'] ?? 405}');
-    _ohpC = TextEditingController(text: '${widget.goals['ohp'] ?? 135}');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: IronMindColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text('EDIT GOALS',
-                    style: GoogleFonts.bebasNeue(
-                        color: IronMindColors.textPrimary,
-                        fontSize: 22,
-                        letterSpacing: 2)),
-                const Spacer(),
-                ElevatedButton(
-                  onPressed: () {
-                    widget.onSaved({
-                      'squat': int.tryParse(_squatC.text) ?? 315,
-                      'bench': int.tryParse(_benchC.text) ?? 225,
-                      'deadlift': int.tryParse(_deadC.text) ?? 405,
-                      'ohp': int.tryParse(_ohpC.text) ?? 135,
-                    });
-                    Navigator.of(context).pop();
-                  },
-                  child: Text('SAVE',
-                      style: GoogleFonts.bebasNeue(fontSize: 16)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _GoalField(label: 'SQUAT GOAL (lbs)', controller: _squatC,
-                color: IronMindColors.accent),
-            const SizedBox(height: 12),
-            _GoalField(label: 'BENCH GOAL (lbs)', controller: _benchC,
-                color: IronMindColors.success),
-            const SizedBox(height: 12),
-            _GoalField(label: 'DEADLIFT GOAL (lbs)', controller: _deadC,
-                color: IronMindColors.accent),
-            const SizedBox(height: 12),
-            _GoalField(label: 'OHP GOAL (lbs)', controller: _ohpC,
-                color: IronMindColors.warning),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
     );
   }
 }
 
-class _GoalField extends StatelessWidget {
-  final String label;
-  final TextEditingController controller;
-  final Color color;
-  const _GoalField(
-      {required this.label, required this.controller, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 130,
-          child: Text(label,
-              style: GoogleFonts.bebasNeue(
-                  color: color, fontSize: 13, letterSpacing: 1.2)),
-        ),
-        Expanded(
-          child: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            style: GoogleFonts.dmMono(
-                color: IronMindColors.textPrimary, fontSize: 16),
-            decoration: const InputDecoration(
-              suffixText: 'lbs',
-              isDense: true,
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Reusable Widgets ──────────────────────────────────────
-
-class _SectionCard extends StatelessWidget {
-  final String title;
-  final Widget child;
-  final Widget? trailing;
-  const _SectionCard(
-      {required this.title, required this.child, this.trailing});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: IronMindColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: IronMindColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(title,
-                  style: GoogleFonts.bebasNeue(
-                      color: IronMindColors.textPrimary,
-                      fontSize: 18,
-                      letterSpacing: 1.5)),
-              const Spacer(),
-              if (trailing != null) trailing!,
-            ],
-          ),
-          const SizedBox(height: 14),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final String unit;
-  final IconData icon;
-  const _StatCard(
-      {required this.label,
-      required this.value,
-      required this.unit,
-      required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: IronMindColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: IronMindColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: IronMindColors.accent, size: 18),
-            const SizedBox(height: 8),
-            Text(value,
-                style: GoogleFonts.bebasNeue(
-                    color: IronMindColors.textPrimary,
-                    fontSize: 26,
-                    letterSpacing: 1)),
-            Text(unit,
-                style: GoogleFonts.dmSans(
-                    color: IronMindColors.textMuted, fontSize: 11)),
-            const SizedBox(height: 2),
-            Text(label,
-                style: GoogleFonts.dmSans(
-                    color: IronMindColors.textMuted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GoalBar extends StatelessWidget {
+class _StrengthProgressRow extends StatelessWidget {
   final String label;
   final double current;
   final double goal;
   final Color color;
-  const _GoalBar(
-      {required this.label,
-      required this.current,
-      required this.goal,
-      required this.color});
+
+  const _StrengthProgressRow({
+    required this.label,
+    required this.current,
+    required this.goal,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     final progress = goal > 0 ? (current / goal).clamp(0.0, 1.0) : 0.0;
-    final pct = (progress * 100).toInt();
+    final currentLabel = current > 0
+        ? '${current.toStringAsFixed(0)} lbs'
+        : '—';
+    final goalLabel = goal > 0
+        ? '${goal.toStringAsFixed(0)} lbs goal'
+        : 'set a goal';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Text(label,
-                style: GoogleFonts.dmSans(
-                    color: IronMindColors.textSecondary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500)),
-            const Spacer(),
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.bebasNeue(
+                  color: IronMindTheme.textPrimary,
+                  fontSize: 18,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
             Text(
-              current > 0
-                  ? '${current.toInt()} / ${goal.toInt()} lbs'
-                  : '— / ${goal.toInt()} lbs',
-              style: GoogleFonts.dmMono(
-                  color: IronMindColors.textSecondary, fontSize: 11),
+              currentLabel,
+              style: GoogleFonts.dmMono(color: color, fontSize: 11),
             ),
             const SizedBox(width: 8),
-            Text('$pct%',
-                style: GoogleFonts.dmMono(color: color, fontSize: 11)),
+            Text(
+              goalLabel,
+              style: GoogleFonts.dmMono(
+                color: IronMindTheme.text3,
+                fontSize: 10,
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(99),
           child: LinearProgressIndicator(
             value: progress,
-            backgroundColor: IronMindColors.border,
-            valueColor: AlwaysStoppedAnimation(color),
-            minHeight: 6,
+            minHeight: 8,
+            backgroundColor: IronMindTheme.border2,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
         ),
       ],
     );
   }
 }
+
