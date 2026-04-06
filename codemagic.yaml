@@ -1,5 +1,5 @@
 workflows:
-  ios-altstore-ipa:
+  ironmind_ios_app_build:
     name: IronMind iOS AltStore IPA
     max_build_duration: 60
     environment:
