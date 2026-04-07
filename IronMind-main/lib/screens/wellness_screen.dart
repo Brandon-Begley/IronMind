@@ -553,56 +553,62 @@ class _WellnessScreenState extends State<WellnessScreen>
     final controller = TextEditingController();
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: IronMindColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'LOG BODYWEIGHT',
-              style: GoogleFonts.bebasNeue(
-                color: IronMindColors.textPrimary,
-                fontSize: 22,
-                letterSpacing: 2,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: IronMindColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'LOG BODYWEIGHT',
+                style: GoogleFonts.bebasNeue(
+                  color: IronMindColors.textPrimary,
+                  fontSize: 22,
+                  letterSpacing: 2,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+              const SizedBox(height: 20),
+              TextField(
+                controller: controller,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  hintText: 'Weight in lbs',
+                  suffixText: 'lbs',
+                ),
+                style: GoogleFonts.dmMono(color: IronMindColors.textPrimary),
               ),
-              decoration: const InputDecoration(
-                hintText: 'Weight in lbs',
-                suffixText: 'lbs',
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () async {
+                  FocusScope.of(ctx).unfocus();
+                  final weight = double.tryParse(controller.text);
+                  if (weight != null) {
+                    await ApiService.logBodyweight(weight);
+                    await _load();
+                    if (mounted) Navigator.of(context).pop();
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                ),
+                child: Text(
+                  'SAVE',
+                  style: GoogleFonts.bebasNeue(fontSize: 18, letterSpacing: 1.5),
+                ),
               ),
-              style: GoogleFonts.dmMono(color: IronMindColors.textPrimary),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () async {
-                final weight = double.tryParse(controller.text);
-                if (weight != null) {
-                  await ApiService.logBodyweight(weight);
-                  await _load();
-                  if (mounted) Navigator.of(context).pop();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 48),
-              ),
-              child: Text(
-                'SAVE',
-                style: GoogleFonts.bebasNeue(fontSize: 18, letterSpacing: 1.5),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

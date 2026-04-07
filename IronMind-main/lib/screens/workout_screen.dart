@@ -1271,6 +1271,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                   ),
                   GestureDetector(
                     onTap: () async {
+                      FocusScope.of(context).unfocus();
                       setState(() => s.done = !s.done);
                       if (s.done) {
                         HapticFeedback.mediumImpact();

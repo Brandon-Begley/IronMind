@@ -563,18 +563,26 @@ class ApiService {
     if (weight <= 0 || reps <= 0) return 0;
     if (reps == 1) return weight;
 
+    double result;
     switch (formula.toLowerCase()) {
       case 'epley':
-        return weight * (1 + reps / 30.0);
+        result = weight * (1 + reps / 30.0);
       case 'brzycki':
-        return weight * (36 / (37 - reps));
+        if (reps >= 37) {
+          // Brzycki formula is undefined at reps >= 37 (denominator <= 0)
+          result = weight * (1 + reps / 30.0); // fall back to Epley
+        } else {
+          result = weight * (36 / (37 - reps));
+        }
       case 'mcglothin':
-        return (100 * weight) / (101.3 - 2.67123 * reps);
+        result = (100 * weight) / (101.3 - 2.67123 * reps);
       case 'lombardi':
-        return weight * pow(reps, 0.10);
+        result = weight * pow(reps, 0.10);
       default:
-        return weight * (1 + reps / 30.0);
+        result = weight * (1 + reps / 30.0);
     }
+    if (result.isNaN || result.isInfinite || result < 0) return weight * (1 + reps / 30.0);
+    return result;
   }
 
   static const List<Map<String, String>> _fallbackExercises = [

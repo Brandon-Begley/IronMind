@@ -279,6 +279,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _nextStep() {
+    FocusScope.of(context).unfocus();
     if (_step == _steps.length - 1) {
       _finish();
       return;
@@ -288,6 +289,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   void _previousStep() {
     if (_step == 0) return;
+    FocusScope.of(context).unfocus();
     setState(() => _step -= 1);
   }
 
