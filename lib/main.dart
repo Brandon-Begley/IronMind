@@ -145,15 +145,18 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 2;
+  int _profileRefreshTick = 0;
+  int _dashboardRefreshTick = 0;
 
   @override
   Widget build(BuildContext context) {
     final screens = [
       const WorkoutScreen(connected: true),
       const NutritionScreen(connected: true),
-      const DashboardScreen(connected: true),
+      DashboardScreen(key: ValueKey(_dashboardRefreshTick), connected: true),
       const WellnessScreen(),
       ProfileScreen(
+        key: ValueKey(_profileRefreshTick),
         onSignOut: widget.onSignOut,
         onRedoOnboarding: widget.onRedoOnboarding,
       ),
@@ -204,7 +207,10 @@ class _MainShellState extends State<MainShell> {
                 icon: Icons.home_outlined,
                 label: 'Dashboard',
                 selected: _selectedIndex == 2,
-                onTap: () => setState(() => _selectedIndex = 2),
+                onTap: () => setState(() {
+                  _dashboardRefreshTick++;
+                  _selectedIndex = 2;
+                }),
               ),
               _NavItem(
                 icon: Icons.favorite_border,
@@ -216,7 +222,10 @@ class _MainShellState extends State<MainShell> {
                 icon: Icons.person_outline,
                 label: 'Profile',
                 selected: _selectedIndex == 4,
-                onTap: () => setState(() => _selectedIndex = 4),
+                onTap: () => setState(() {
+                  _profileRefreshTick++;
+                  _selectedIndex = 4;
+                }),
               ),
             ],
           ),

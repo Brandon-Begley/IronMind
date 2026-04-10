@@ -3564,9 +3564,7 @@ Future<void> _showRoutineBuilderSheet(
                     return;
                   }
                   // Auto-detect muscle groups from exercise names
-                  final fakeEntries = selectedExercises.map((n) => _ExerciseEntry(name: n)).toList();
-                  final detected = _detectMuscleGroups(fakeEntries);
-                  // Heuristic split: first 2 groups as primary, rest as secondary
+                  final detected = detectMuscleGroupsFromNames(selectedExercises);
                   final primary = detected.take(2).toList();
                   final secondary = detected.skip(2).toList();
                   await ApiService.saveRoutine({
