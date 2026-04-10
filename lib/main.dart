@@ -196,7 +196,7 @@ class _MainShellState extends State<MainShell> {
               ),
               _NavItem(
                 icon: Icons.restaurant_outlined,
-                label: 'Nutrition',
+                label: 'Food Log',
                 selected: _selectedIndex == 1,
                 onTap: () => setState(() => _selectedIndex = 1),
               ),

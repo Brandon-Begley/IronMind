@@ -18,7 +18,7 @@ class IronMindAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => Size.fromHeight(bottom != null ? 56 + bottom!.preferredSize.height : 56);
+  Size get preferredSize => Size.fromHeight(bottom != null ? 48 + bottom!.preferredSize.height : 48);
 
   @override
   Widget build(BuildContext context) {
@@ -27,19 +27,20 @@ class IronMindAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       titleSpacing: 16,
+      toolbarHeight: 48,
       title: Row(children: [
-        Text('IRON', style: GoogleFonts.bebasNeue(color: IronMindTheme.accent, fontSize: 20, letterSpacing: 3)),
-        Text('MIND', style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 20, letterSpacing: 3)),
+        Text('IRON', style: GoogleFonts.bebasNeue(color: IronMindTheme.accent, fontSize: 18, letterSpacing: 3)),
+        Text('MIND', style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 18, letterSpacing: 3)),
         const SizedBox(width: 6),
-        Container(width: 6, height: 6, decoration: BoxDecoration(
+        Container(width: 5, height: 5, decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: connected ? IronMindTheme.green : IronMindTheme.text3,
         )),
         if (subtitle != null) ...[
-          const SizedBox(width: 10),
-          Container(width: 1, height: 14, color: IronMindTheme.border2),
-          const SizedBox(width: 10),
-          Text(subtitle!.toUpperCase(), style: GoogleFonts.bebasNeue(color: IronMindTheme.text3, fontSize: 16, letterSpacing: 2)),
+          const SizedBox(width: 8),
+          Container(width: 1, height: 12, color: IronMindTheme.border2),
+          const SizedBox(width: 8),
+          Text(subtitle!.toUpperCase(), style: GoogleFonts.bebasNeue(color: IronMindTheme.text3, fontSize: 14, letterSpacing: 2)),
         ],
       ]),
       actions: actions,
@@ -104,7 +105,7 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      Text(title, style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 20, letterSpacing: 2)),
+      Text(title, style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 16, letterSpacing: 2)),
       if (trailing != null) trailing!,
     ],
   );
@@ -121,7 +122,7 @@ class IronButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: double.infinity, height: 46,
+    width: double.infinity, height: 40,
     child: ElevatedButton(
       onPressed: loading ? null : onPressed,
       style: ElevatedButton.styleFrom(
@@ -132,8 +133,8 @@ class IronButton extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       child: loading
-          ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: textColor ?? IronMindTheme.bg))
-          : Text(label, style: GoogleFonts.bebasNeue(fontSize: 17, letterSpacing: 1.5)),
+          ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: textColor ?? IronMindTheme.bg))
+          : Text(label, style: GoogleFonts.bebasNeue(fontSize: 15, letterSpacing: 1.5)),
     ),
   );
 }
@@ -227,16 +228,16 @@ class StatCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (valueColor != null)
-              Container(height: 3, color: valueColor!.withOpacity(0.7)),
+              Container(height: 2, color: valueColor!.withOpacity(0.7)),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(label.toUpperCase(), style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1)),
-                const SizedBox(height: 4),
-                Text(value, style: GoogleFonts.bebasNeue(color: valueColor ?? IronMindTheme.textPrimary, fontSize: 24, letterSpacing: 1)),
+                Text(label.toUpperCase(), style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 8, letterSpacing: 1)),
+                const SizedBox(height: 3),
+                Text(value, style: GoogleFonts.bebasNeue(color: valueColor ?? IronMindTheme.textPrimary, fontSize: 20, letterSpacing: 1)),
                 if (sub != null) ...[
                   const SizedBox(height: 1),
-                  Text(sub!, style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9)),
+                  Text(sub!, style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 8)),
                 ],
               ]),
             ),
@@ -255,24 +256,24 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
-          width: 64,
-          height: 64,
+          width: 52,
+          height: 52,
           decoration: BoxDecoration(
             color: IronMindTheme.accentDim,
             shape: BoxShape.circle,
             border: Border.all(color: IronMindTheme.accent.withOpacity(0.2)),
           ),
           child: Center(
-            child: Text(icon, style: const TextStyle(fontSize: 28)),
+            child: Text(icon, style: const TextStyle(fontSize: 22)),
           ),
         ),
-        const SizedBox(height: 16),
-        Text(title.toUpperCase(), style: GoogleFonts.bebasNeue(color: IronMindTheme.text2, fontSize: 18, letterSpacing: 2)),
-        const SizedBox(height: 6),
-        Text(sub, style: GoogleFonts.dmSans(color: IronMindTheme.text3, fontSize: 12, height: 1.4), textAlign: TextAlign.center),
+        const SizedBox(height: 12),
+        Text(title.toUpperCase(), style: GoogleFonts.bebasNeue(color: IronMindTheme.text2, fontSize: 15, letterSpacing: 2)),
+        const SizedBox(height: 4),
+        Text(sub, style: GoogleFonts.dmSans(color: IronMindTheme.text3, fontSize: 11, height: 1.4), textAlign: TextAlign.center),
       ]),
     ),
   );

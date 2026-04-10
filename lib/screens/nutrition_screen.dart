@@ -75,7 +75,7 @@ class _NutritionScreenState extends State<NutritionScreen> with SingleTickerProv
     return Scaffold(
       backgroundColor: IronMindTheme.bg,
       appBar: IronMindAppBar(
-        subtitle: 'Nutrition',
+        subtitle: 'Food Log',
         connected: widget.connected,
         actions: [
           IconButton(icon: const Icon(Icons.tune, size: 20), color: IronMindTheme.text2, onPressed: _showTargetSetup, tooltip: 'Set targets'),
@@ -222,41 +222,69 @@ class _TodayTabState extends State<_TodayTab> {
     final targetC = (widget.targets['carbs'] as num).toDouble();
     final targetF = (widget.targets['fat'] as num).toDouble();
     final calPct = targetCal > 0 ? (_totalCals / targetCal).clamp(0.0, 1.0) : 0.0;
-    final remaining = targetCal - _totalCals;
+    final over = _totalCals > targetCal;
+    final remaining = (targetCal - _totalCals).abs();
 
     return RefreshIndicator(
       color: IronMindTheme.accent, backgroundColor: IronMindTheme.surface2, onRefresh: _load,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-          // ── Calorie summary card ───────────────────────────────────────────
-          IronCard(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const IronLabel('Today'),
-              const SizedBox(height: 6),
-              Text('$_totalCals', style: GoogleFonts.bebasNeue(color: IronMindTheme.accent, fontSize: 32, letterSpacing: 1)),
-              Text('of $targetCal cal  •  ${remaining >= 0 ? remaining : 0} remaining', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 10)),
-              const SizedBox(height: 10),
-              MacroBar(label: 'Protein', value: _totalP, target: targetP, color: IronMindTheme.green),
-              MacroBar(label: 'Carbs', value: _totalC, target: targetC, color: IronMindTheme.blue),
-              MacroBar(label: 'Fat', value: _totalF, target: targetF, color: IronMindTheme.orange),
-            ])),
-            const SizedBox(width: 12),
-            SizedBox(width: 80, height: 80, child: Stack(alignment: Alignment.center, children: [
-              CircularProgressIndicator(value: 1.0, strokeWidth: 7, color: IronMindTheme.surface3, backgroundColor: Colors.transparent),
-              CircularProgressIndicator(value: calPct, strokeWidth: 7, color: calPct >= 1.0 ? IronMindTheme.red : IronMindTheme.accent, backgroundColor: Colors.transparent, strokeCap: StrokeCap.round),
-              Column(mainAxisSize: MainAxisSize.min, children: [
-                Text('${(calPct * 100).round()}%', style: GoogleFonts.bebasNeue(color: calPct >= 1.0 ? IronMindTheme.red : IronMindTheme.accent, fontSize: 16)),
-                Text('of goal', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 7)),
-              ]),
-            ])),
-          ])),
-
+          // ── Calorie hero ───────────────────────────────────────────────────
+          Text('CALORIES', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 10, letterSpacing: 2)),
+          const SizedBox(height: 2),
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(
+              '$_totalCals',
+              style: GoogleFonts.bebasNeue(
+                color: over ? IronMindTheme.red : IronMindTheme.textPrimary,
+                fontSize: 56,
+                letterSpacing: 1,
+                height: 1,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8, left: 8),
+              child: Text(
+                '/ $targetCal',
+                style: GoogleFonts.dmMono(color: IronMindTheme.text2, fontSize: 12),
+              ),
+            ),
+          ]),
+          Text(
+            over ? '$remaining kcal over budget' : '$remaining kcal remaining',
+            style: GoogleFonts.dmSans(
+              color: over ? IronMindTheme.red : IronMindTheme.text2,
+              fontSize: 11,
+            ),
+          ),
           const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: calPct,
+              minHeight: 5,
+              backgroundColor: IronMindTheme.surface3,
+              valueColor: AlwaysStoppedAnimation(over ? IronMindTheme.red : IronMindTheme.accent),
+            ),
+          ),
 
-          // ── Water tracker ─────────────────────────────────────────────────
+          const SizedBox(height: 24),
+
+          // ── Macros ─────────────────────────────────────────────────────────
+          Row(children: [
+            Expanded(child: _MacroColumn(label: 'PROTEIN', current: _totalP, target: targetP, color: IronMindTheme.green)),
+            const SizedBox(width: 16),
+            Expanded(child: _MacroColumn(label: 'CARBS', current: _totalC, target: targetC, color: IronMindTheme.blue)),
+            const SizedBox(width: 16),
+            Expanded(child: _MacroColumn(label: 'FAT', current: _totalF, target: targetF, color: IronMindTheme.orange)),
+          ]),
+
+          const SizedBox(height: 24),
+
+          // ── Water tracker ──────────────────────────────────────────────────
           _WaterWidget(
             glasses: _waterGlasses,
             goal: _waterGoal,
@@ -264,39 +292,42 @@ class _TodayTabState extends State<_TodayTab> {
             onRemove: () => _setWater(_waterGlasses - 1),
           ),
 
-          const SizedBox(height: 10),
+          const SizedBox(height: 20),
 
           // ── Log food button ────────────────────────────────────────────────
           GestureDetector(
             onTap: widget.onAddFood,
             child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: IronMindTheme.accentDim, borderRadius: BorderRadius.circular(8), border: Border.all(color: IronMindTheme.accent.withOpacity(0.3))),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: IronMindTheme.accentDim,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: IronMindTheme.accent.withValues(alpha: 0.3)),
+              ),
               child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const Icon(Icons.add_circle_outline, color: IronMindTheme.accent, size: 18),
-                const SizedBox(width: 8),
-                Text('LOG FOOD', style: GoogleFonts.bebasNeue(color: IronMindTheme.accent, fontSize: 14, letterSpacing: 1)),
+                const Icon(Icons.add, color: IronMindTheme.accent, size: 16),
+                const SizedBox(width: 6),
+                Text('LOG FOOD', style: GoogleFonts.bebasNeue(color: IronMindTheme.accent, fontSize: 14, letterSpacing: 1.5)),
               ]),
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 28),
 
-          // ── Grouped food list ─────────────────────────────────────────────
+          // ── Grouped food list ──────────────────────────────────────────────
           if (_loading)
-            const Center(child: CircularProgressIndicator(color: IronMindTheme.accent))
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: IronMindTheme.accent)))
           else if (_foods.isEmpty)
             const EmptyState(icon: '🥗', title: 'No Food Logged', sub: 'Tap above to search and log food')
-          else ...[
+          else
             for (final meal in _kMealOrder) ...[
               if (_grouped.containsKey(meal)) ...[
                 _MealGroupHeader(
                   meal: meal,
                   totalCals: _grouped[meal]!.fold(0, (s, f) => s + ((f['calories'] as num?) ?? 0).toInt()),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 ..._grouped[meal]!.asMap().entries.map((entry) {
-                  // find the global index for deletion
                   final globalIdx = _foods.indexWhere((f) => identical(f, entry.value));
                   return Dismissible(
                     key: Key('food-$meal-${entry.key}-${widget.date}'),
@@ -304,8 +335,8 @@ class _TodayTabState extends State<_TodayTab> {
                     background: Container(
                       alignment: Alignment.centerRight,
                       padding: const EdgeInsets.only(right: 20),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(color: IronMindTheme.redDim, borderRadius: BorderRadius.circular(10)),
+                      margin: const EdgeInsets.only(bottom: 6),
+                      decoration: BoxDecoration(color: IronMindTheme.redDim, borderRadius: BorderRadius.circular(8)),
                       child: const Icon(Icons.delete_outline, color: IronMindTheme.red),
                     ),
                     onDismissed: (_) async {
@@ -313,14 +344,16 @@ class _TodayTabState extends State<_TodayTab> {
                       _load();
                     },
                     child: Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: IronCard(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        child: Row(children: [
-                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(entry.value['name'] ?? '', style: GoogleFonts.dmSans(color: IronMindTheme.textPrimary, fontWeight: FontWeight.w500, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            Text(entry.value['serving'] ?? '1 serving', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9)),
-                            const SizedBox(height: 4),
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(
+                              entry.value['name'] ?? '',
+                              style: GoogleFonts.dmSans(color: IronMindTheme.textPrimary, fontWeight: FontWeight.w500, fontSize: 14),
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
                             Row(children: [
                               Text('${(entry.value['protein'] as num?)?.toStringAsFixed(0) ?? 0}g P', style: GoogleFonts.dmMono(color: IronMindTheme.green, fontSize: 10)),
                               const SizedBox(width: 8),
@@ -328,20 +361,64 @@ class _TodayTabState extends State<_TodayTab> {
                               const SizedBox(width: 8),
                               Text('${(entry.value['fat'] as num?)?.toStringAsFixed(0) ?? 0}g F', style: GoogleFonts.dmMono(color: IronMindTheme.orange, fontSize: 10)),
                             ]),
-                          ])),
-                          Text('${entry.value['calories'] ?? 0}', style: GoogleFonts.bebasNeue(color: IronMindTheme.accent, fontSize: 24, letterSpacing: 1)),
-                        ]),
-                      ),
+                          ]),
+                        ),
+                        Text(
+                          '${entry.value['calories'] ?? 0}',
+                          style: GoogleFonts.bebasNeue(color: IronMindTheme.text2, fontSize: 18, letterSpacing: 1),
+                        ),
+                      ]),
                     ),
                   );
                 }),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
+                Divider(color: IronMindTheme.border, height: 1),
+                const SizedBox(height: 16),
               ],
             ],
-          ],
         ]),
       ),
     );
+  }
+}
+
+// ── Macro column (MacroFactor-style) ─────────────────────────────────────────
+class _MacroColumn extends StatelessWidget {
+  final String label;
+  final double current;
+  final double target;
+  final Color color;
+
+  const _MacroColumn({required this.label, required this.current, required this.target, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
+    final remaining = (target - current).clamp(0.0, double.infinity);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1.5)),
+      const SizedBox(height: 4),
+      Text(
+        '${current.toStringAsFixed(0)}g',
+        style: GoogleFonts.bebasNeue(color: color, fontSize: 22, letterSpacing: 1, height: 1),
+      ),
+      Text(
+        '${remaining.toStringAsFixed(0)}g left',
+        style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9),
+      ),
+      const SizedBox(height: 6),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(99),
+        child: LinearProgressIndicator(
+          value: pct,
+          minHeight: 4,
+          backgroundColor: IronMindTheme.surface3,
+          valueColor: AlwaysStoppedAnimation(color),
+        ),
+      ),
+      const SizedBox(height: 2),
+      Text('/ ${target.toStringAsFixed(0)}g', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9)),
+    ]);
   }
 }
 

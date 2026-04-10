@@ -357,7 +357,7 @@ class _WellnessScreenState extends State<WellnessScreen>
                 _goalDistanceLabel(latestWeight),
                 style: GoogleFonts.bebasNeue(
                   color: IronMindColors.textPrimary,
-                  fontSize: 28,
+                  fontSize: 22,
                   letterSpacing: 1.2,
                 ),
               ),
@@ -883,7 +883,7 @@ class _BodyMetricsHero extends StatelessWidget {
                   'BODY METRICS',
                   style: GoogleFonts.bebasNeue(
                     color: IronMindColors.textPrimary,
-                    fontSize: 24,
+                    fontSize: 18,
                     letterSpacing: 1.8,
                   ),
                 ),
@@ -1486,7 +1486,7 @@ class _OverviewCard extends StatelessWidget {
               value,
               style: GoogleFonts.bebasNeue(
                 color: accent,
-                fontSize: 24,
+                fontSize: 20,
                 letterSpacing: 1,
               ),
             ),

@@ -27,15 +27,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   List<Map<String, dynamic>> _logs = [];
   int _bestStreakDays = 0;
   int _totalWorkouts = 0;
-  int _weekSessions = 0;
-  double _weekVolume = 0;
-  Map<String, dynamic>? _wellness;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _load();
   }
 
@@ -46,14 +43,12 @@ class _ProfileScreenState extends State<ProfileScreen>
       ApiService.getLogs(),
       ApiService.getWorkoutLoggedDates(),
       ApiService.getHabits(),
-      ApiService.getWellnessToday(),
     ]);
     final profile = results[0] as Map<String, dynamic>;
     final goals = results[1] as Map<String, dynamic>;
     final logs = results[2] as List<Map<String, dynamic>>;
     final workoutDates = results[3] as Set<String>;
     final habits = results[4] as List<Map<String, dynamic>>;
-    final wellness = results[5] as Map<String, dynamic>?;
 
     // Best streak across workouts + all custom habits
     int bestStreak = ApiService.computeStreak(workoutDates)['longest'] ?? 0;
@@ -63,22 +58,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (s > bestStreak) bestStreak = s;
     }
 
-    // Weekly metrics
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    final weekLogs = logs.where((log) {
-      final date = DateTime.tryParse(log['date']?.toString() ?? '');
-      if (date == null) return false;
-      return date.isAfter(weekStart.subtract(const Duration(days: 1)));
-    }).toList();
-    final weekVol = weekLogs.fold<double>(0, (sum, log) {
-      final exercises = log['exercises'] as List? ?? [];
-      return sum + exercises.fold<double>(0, (s, e) =>
-        s + ((e['weight'] ?? 0) as num).toDouble() *
-            ((e['sets'] ?? 1) as num).toDouble() *
-            ((e['reps'] ?? 1) as num).toDouble());
-    });
-
     if (!mounted) return;
     setState(() {
       _profile = profile;
@@ -86,9 +65,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       _logs = logs;
       _bestStreakDays = bestStreak;
       _totalWorkouts = logs.length;
-      _weekSessions = weekLogs.length;
-      _weekVolume = weekVol;
-      _wellness = wellness;
       _loading = false;
     });
   }
@@ -117,7 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     )
                   : TabBarView(
                       controller: _tabController,
-                      children: [_buildInfoTab(), _buildSettingsTab()],
+                      children: [_buildInfoTab(), _buildBadgesTab(), _buildSettingsTab()],
                     ),
             ),
           ],
@@ -138,7 +114,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   text: 'IRON',
                   style: GoogleFonts.bebasNeue(
                     color: IronMindColors.accent,
-                    fontSize: 24,
+                    fontSize: 20,
                     letterSpacing: 2,
                   ),
                 ),
@@ -146,7 +122,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   text: 'MIND',
                   style: GoogleFonts.bebasNeue(
                     color: IronMindColors.textPrimary,
-                    fontSize: 24,
+                    fontSize: 20,
                     letterSpacing: 2,
                   ),
                 ),
@@ -154,7 +130,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   text: '  PROFILE',
                   style: GoogleFonts.bebasNeue(
                     color: IronMindColors.textSecondary,
-                    fontSize: 20,
+                    fontSize: 16,
                     letterSpacing: 2,
                   ),
                 ),
@@ -186,7 +162,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           labelColor: IronMindColors.background,
           unselectedLabelColor: IronMindColors.textSecondary,
           padding: const EdgeInsets.all(4),
-          tabs: const [Tab(text: 'INFO'), Tab(text: 'SETTINGS')],
+          tabs: const [Tab(text: 'INFO'), Tab(text: 'BADGES'), Tab(text: 'SETTINGS')],
         ),
       ),
     );
@@ -198,26 +174,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       (_profile['goal'] ?? _profile['trainingGoal'] ?? '—').toString(),
     );
     final style = _formatStyle((_profile['style'] ?? '—').toString());
-    final level = _formatExperience(
-      (_profile['experience'] ?? _profile['experienceLevel'] ?? '—')
-          .toString(),
-    );
-    final gender = (_profile['gender'] ?? '—').toString();
-    final weakPoint = _formatWeakPoint(
-      (_profile['weakpoint'] ?? 'balanced').toString(),
-    );
-    final age = _profileAgeLabel();
-    final height = _profileHeightLabel();
     final bodyweight = _displayWeight(_profile['bodyweight'] ?? _profile['weight']);
     final targetWeight = _displayWeight(_profile['goalWeight']);
-    final trainingDays = _profile['trainingDays'];
     final sessionLength = _profile['sessionLength'];
 
-    final monthSessions = _logs.where((log) {
-      final date = DateTime.tryParse(log['date']?.toString() ?? '');
-      if (date == null) return false;
-      return date.isAfter(DateTime.now().subtract(const Duration(days: 30)));
-    }).length;
     final totalSets = _logs.fold<int>(0, (sum, log) {
       final exercises = log['exercises'] as List? ?? [];
       return sum +
@@ -229,21 +189,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       final exercises = log['exercises'] as List? ?? [];
       return sum + exercises.length;
     });
-    final totalVolume = _logs.fold<double>(0, (sum, log) {
-      final exercises = log['exercises'] as List? ?? [];
-      return sum +
-          exercises.fold<double>(0, (exerciseSum, exercise) {
-            return exerciseSum +
-                ((exercise['weight'] ?? 0) as num).toDouble() *
-                    ((exercise['sets'] ?? 1) as num).toDouble() *
-                    ((exercise['reps'] ?? 1) as num).toDouble();
-          });
-    });
-    final avgVolume = _logs.isEmpty ? 0.0 : totalVolume / _logs.length;
-
-    final moodVal = _wellness?['mood'];
-    final moodStr = moodVal != null ? '$moodVal/10' : '—';
-
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       children: [
@@ -259,7 +204,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               : '${(sessionLength as num).round()} min',
         ),
         const SizedBox(height: 12),
-        // ── Lifetime stats (top) ───────────────────────────────────────────
+        // ── Lifetime stats ────────────────────────────────────────────────
         IronCard(
           child: Row(
             children: [
@@ -284,108 +229,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
         const SizedBox(height: 12),
-        // ── This week summary ──────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(
-            'THIS WEEK',
-            style: GoogleFonts.dmMono(
-              color: IronMindColors.textMuted,
-              fontSize: 10,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ),
-        Row(
-          children: [
-            Expanded(child: StatCard(
-              label: 'Sessions',
-              value: '$_weekSessions',
-              sub: 'this week',
-              valueColor: IronMindColors.accent,
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: StatCard(
-              label: 'Volume',
-              value: _formatVolume(_weekVolume),
-              sub: 'lbs lifted',
-              valueColor: IronMindColors.success,
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: StatCard(
-              label: 'Mood',
-              value: moodStr,
-              sub: moodVal != null ? 'today' : 'not logged',
-              valueColor: IronMindColors.textPrimary,
-            )),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // ── Profile stat cards ─────────────────────────────────────────────
-        Row(
-          children: [
-            Expanded(
-              child: StatCard(
-                label: 'Experience',
-                value: level,
-                valueColor: IronMindColors.accent,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: StatCard(
-                label: 'Days / Week',
-                value: trainingDays == null
-                    ? '—'
-                    : '${(trainingDays as num).round()}',
-                sub: weakPoint,
-                valueColor: IronMindColors.textPrimary,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: StatCard(
-                label: 'Age',
-                value: age,
-                sub: gender,
-                valueColor: IronMindColors.success,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: StatCard(
-                label: 'Height',
-                value: height,
-                sub: 'body stats',
-                valueColor: IronMindColors.textPrimary,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: StatCard(
-                label: 'Avg Volume',
-                value: _formatVolume(avgVolume),
-                sub: 'per session',
-                valueColor: IronMindColors.accent,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: StatCard(
-                label: '30 Days',
-                value: '$monthSessions',
-                sub: 'sessions',
-                valueColor: IronMindColors.success,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // ── Current lifts ──────────────────────────────────────────────────
+        // ── Current lifts ─────────────────────────────────────────────────
         _LiftSummaryCard(
           squat: _liftStr(_profile['squat'] ?? _profile['currentSquat']),
           bench: _liftStr(_profile['bench'] ?? _profile['currentBench']),
@@ -393,44 +237,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ohp: _liftStr(_profile['ohp'] ?? _profile['currentOhp']),
         ),
         const SizedBox(height: 12),
-        // ── Badges button ──────────────────────────────────────────────────
-        GestureDetector(
-          onTap: _showBadgesSheet,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: IronMindColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: IronMindColors.border),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.military_tech_outlined, color: IronMindColors.accent, size: 20),
-                const SizedBox(width: 14),
-                Text(
-                  'Badges & Milestones',
-                  style: GoogleFonts.dmSans(
-                    color: IronMindColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '${_unlockedBadgeCount()} unlocked',
-                  style: GoogleFonts.dmMono(
-                    color: IronMindColors.textSecondary,
-                    fontSize: 11,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const Icon(Icons.chevron_right, color: IronMindColors.textMuted, size: 18),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        // ── Recent Workouts ────────────────────────────────────────────────
+        // ── Recent Workouts ───────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Text(
@@ -473,7 +280,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             log['day_name'] ?? 'Workout',
                             style: GoogleFonts.bebasNeue(
                               color: IronMindColors.textPrimary,
-                              fontSize: 18,
+                              fontSize: 15,
                               letterSpacing: 1,
                             ),
                           ),
@@ -536,53 +343,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     return months[(month - 1).clamp(0, 11)];
   }
 
-  int _unlockedBadgeCount() {
-    const streakMilestones = [7, 14, 30, 60, 100];
-    const workoutMilestones = [10, 50, 100, 250, 500];
-    final streakCount = streakMilestones.where((d) => _bestStreakDays >= d).length;
-    final workoutCount = workoutMilestones.where((c) => _totalWorkouts >= c).length;
-    return streakCount + workoutCount;
-  }
-
-  void _showBadgesSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.65,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        builder: (_, controller) => Container(
-          decoration: const BoxDecoration(
-            color: IronMindColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 36, height: 4,
-                decoration: BoxDecoration(
-                  color: IronMindColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: controller,
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                  child: _BadgesCard(
-                    bestStreakDays: _bestStreakDays,
-                    totalWorkouts: _totalWorkouts,
-                  ),
-                ),
-              ),
-            ],
-          ),
+  Widget _buildBadgesTab() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      children: [
+        _BadgesCard(
+          bestStreakDays: _bestStreakDays,
+          totalWorkouts: _totalWorkouts,
         ),
-      ),
+      ],
     );
   }
 
@@ -651,45 +420,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     return '${value.toStringAsFixed(0)} lbs';
   }
 
-  String _profileAgeLabel() {
-    final birthDate = DateTime.tryParse(_profile['birthDate']?.toString() ?? '');
-    if (birthDate != null) {
-      final now = DateTime.now();
-      var age = now.year - birthDate.year;
-      final hadBirthday =
-          now.month > birthDate.month ||
-          (now.month == birthDate.month && now.day >= birthDate.day);
-      if (!hadBirthday) age -= 1;
-      return '$age';
-    }
-    final age = _profile['age'];
-    if (age == null || '$age'.isEmpty) return '—';
-    return '$age';
-  }
-
-  String _profileHeightLabel() {
-    final feet = int.tryParse(_profile['heightFeet']?.toString() ?? '');
-    final inches = int.tryParse(_profile['heightInches']?.toString() ?? '');
-    if (feet != null) return "$feet'${inches ?? 0}\"";
-    final total = int.tryParse(_profile['height']?.toString() ?? '');
-    if (total == null || total <= 0) return '—';
-    return "${total ~/ 12}'${total % 12}\"";
-  }
-
-  String _formatExperience(String value) {
-    switch (value.toLowerCase()) {
-      case 'beginner':
-        return 'Beginner';
-      case 'intermediate':
-        return 'Intermediate';
-      case 'advanced':
-        return 'Advanced';
-      case 'elite':
-        return 'Elite';
-      default:
-        return value == '—' ? '—' : _titleize(value);
-    }
-  }
 
   String _formatGoal(String value) {
     switch (value.toLowerCase()) {
@@ -729,28 +459,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  String _formatWeakPoint(String value) {
-    switch (value.toLowerCase()) {
-      case 'none':
-      case 'balanced':
-      case 'none / balanced':
-        return 'Balanced';
-      case 'squat-depth':
-        return 'Squat Depth';
-      case 'squat-lockout':
-        return 'Squat Lockout';
-      case 'bench-bottom':
-        return 'Bench Off Chest';
-      case 'bench-lockout':
-        return 'Bench Lockout';
-      case 'deadlift-floor':
-        return 'Deadlift Off Floor';
-      case 'deadlift-lockout':
-        return 'Deadlift Lockout';
-      default:
-        return value == '—' ? '—' : _titleize(value);
-    }
-  }
 
   String _titleize(String value) {
     return value
@@ -862,22 +570,22 @@ class _SettingsRow extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: IronMindColors.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: IronMindColors.border),
         ),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 14),
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 12),
             Text(
               label,
               style: GoogleFonts.dmSans(
                 color: color,
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -885,7 +593,7 @@ class _SettingsRow extends StatelessWidget {
             const Icon(
               Icons.chevron_right,
               color: IronMindColors.textMuted,
-              size: 18,
+              size: 16,
             ),
           ],
         ),
@@ -1006,14 +714,14 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF101924), Color(0xFF17354D)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: IronMindColors.accent.withValues(alpha: 0.28),
         ),
@@ -1025,19 +733,19 @@ class _HeroCard extends StatelessWidget {
             name == '—' ? 'IRONMIND ATHLETE' : name.toUpperCase(),
             style: GoogleFonts.bebasNeue(
               color: IronMindColors.textPrimary,
-              fontSize: 30,
+              fontSize: 24,
               letterSpacing: 2,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             '$goal • $style',
             style: GoogleFonts.dmSans(
               color: IronMindColors.textSecondary,
-              fontSize: 13,
+              fontSize: 12,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(child: _HeroMetric(label: 'Current', value: currentWeight)),
@@ -1062,10 +770,10 @@ class _HeroMetric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1074,15 +782,15 @@ class _HeroMetric extends StatelessWidget {
             label.toUpperCase(),
             style: GoogleFonts.dmMono(
               color: IronMindColors.textSecondary,
-              fontSize: 10,
+              fontSize: 9,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Text(
             value,
             style: GoogleFonts.bebasNeue(
               color: IronMindColors.textPrimary,
-              fontSize: 20,
+              fontSize: 17,
               letterSpacing: 1.2,
             ),
           ),
@@ -1196,7 +904,7 @@ class _FooterMetric extends StatelessWidget {
           value,
           style: GoogleFonts.bebasNeue(
             color: color,
-            fontSize: 28,
+            fontSize: 22,
             letterSpacing: 1.5,
           ),
         ),
@@ -1343,8 +1051,8 @@ class _Badge extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: unlocked
-              ? IronMindColors.accent.withOpacity(0.12)
-              : IronMindColors.border.withOpacity(0.3),
+              ? IronMindColors.accent.withValues(alpha: 0.12)
+              : IronMindColors.border.withValues(alpha: 0.3),
           border: Border.all(
             color: unlocked ? IronMindColors.accent : IronMindColors.border,
             width: 1.5,
