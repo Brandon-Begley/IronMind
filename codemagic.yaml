@@ -11,19 +11,15 @@ workflows:
     scripts:
       - name: Set iOS bundle ID
         script: |
-          cd IronMind-V.0.6.2/IronMind-main
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" ios/Runner/Info.plist
       - name: Install Flutter packages
-        script: |
-          cd IronMind-V.0.6.2/IronMind-main
-          flutter pub get
+        script: flutter pub get
       - name: Install CocoaPods
         script: |
-          cd IronMind-V.0.6.2/IronMind-main/ios
+          cd ios
           pod install
       - name: Build unsigned release app
         script: |
-          cd IronMind-V.0.6.2/IronMind-main
           flutter build ios --release --no-codesign --config-only --dart-define=EXERCISE_DB_API_KEY=$EXERCISE_DB_API_KEY
           xcodebuild -workspace ios/Runner.xcworkspace \
             -scheme Runner \
@@ -37,14 +33,14 @@ workflows:
             CODE_SIGN_IDENTITY=""
       - name: Package unsigned IPA for AltStore
         script: |
-          cd IronMind-V.0.6.2/IronMind-main/build/ios/archive/Runner.xcarchive/Products/Applications
+          cd build/ios/archive/Runner.xcarchive/Products/Applications
           rm -rf Payload IronMind-AltStore.ipa
           mkdir -p Payload
           cp -R Runner.app Payload/Runner.app
           zip -r IronMind-AltStore.ipa Payload
     artifacts:
-      - IronMind-V.0.6.2/IronMind-main/build/ios/archive/Runner.xcarchive/Products/Applications/IronMind-AltStore.ipa
-      - IronMind-V.0.6.2/IronMind-main/build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+      - build/ios/archive/Runner.xcarchive/Products/Applications/IronMind-AltStore.ipa
+      - build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
 
   ios-unsigned-check:
     name: IronMind iOS Unsigned Check
@@ -58,19 +54,15 @@ workflows:
     scripts:
       - name: Set iOS bundle ID
         script: |
-          cd IronMind-V.0.6.2/IronMind-main
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" ios/Runner/Info.plist
       - name: Install Flutter packages
-        script: |
-          cd IronMind-V.0.6.2/IronMind-main
-          flutter pub get
+        script: flutter pub get
       - name: Install CocoaPods
         script: |
-          cd IronMind-V.0.6.2/IronMind-main/ios
+          cd ios
           pod install
       - name: Build unsigned iOS app
         script: |
-          cd IronMind-V.0.6.2/IronMind-main
           flutter build ios --release --no-codesign --config-only --dart-define=EXERCISE_DB_API_KEY=$EXERCISE_DB_API_KEY
           xcodebuild -workspace ios/Runner.xcworkspace \
             -scheme Runner \
@@ -83,4 +75,4 @@ workflows:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
     artifacts:
-      - IronMind-V.0.6.2/IronMind-main/build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+      - build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
