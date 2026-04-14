@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/api_service.dart';
+import '../services/health_service.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -37,6 +38,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _todayWorkout = false;
   bool _todayFood = false;
   bool _todayCheckIn = false;
+
+  // Health data
+  int? _healthSteps;
+  double? _healthActiveCalories;
 
   @override
   void initState() {
@@ -78,6 +83,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await _calcConsistency(checkInDates, nutritionDates, habits, workoutDates);
     } catch (_) {}
     setState(() => _loading = false);
+
+    // Load health data after the main paint so it doesn't block the screen
+    if (HealthService.instance.isConnected) {
+      final steps = await HealthService.instance.getTodaySteps();
+      final cals  = await HealthService.instance.getTodayActiveCalories();
+      if (mounted) {
+        setState(() {
+          _healthSteps = steps;
+          _healthActiveCalories = cals;
+        });
+      }
+    }
   }
 
   void _calcMetrics() {
@@ -178,6 +195,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   double _goalBodyweight() => _toDouble(_profile['goalWeight']);
 
+  /// Returns 0.0–1.0 progress toward the bodyweight goal, regardless of
+  /// whether the goal is a bulk (current < goal) or a cut (current > goal).
+  double? _bodyweightProgress() {
+    final current = _currentBodyweight();
+    final goal = _goalBodyweight();
+    if (current <= 0 || goal <= 0 || current == goal) return null;
+    if (current > goal) {
+      // Cutting: need to lose (current - goal) lbs from some starting point.
+      // Use the heaviest logged bodyweight as the starting baseline.
+      final heaviest = _bodyweightLogs.fold<double>(current, (max, log) {
+        final w = _toDouble(log['weight']);
+        return w > max ? w : max;
+      });
+      if (heaviest <= goal) return 1.0;
+      return ((heaviest - current) / (heaviest - goal)).clamp(0.0, 1.0);
+    } else {
+      // Bulking: simple ratio
+      return (current / goal).clamp(0.0, 1.0);
+    }
+  }
+
   String _weightGoalLabel() {
     final c = _currentBodyweight(), g = _goalBodyweight();
     if (c <= 0 || g <= 0) return 'Set a target weight';
@@ -227,6 +265,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       checkIn:  _todayCheckIn,
                       mood:     _wellness?['mood'],
                     ),
+                    if (HealthService.instance.isConnected &&
+                        (_healthSteps != null || _healthActiveCalories != null)) ...[
+                      const SizedBox(height: 10),
+                      _HealthSummaryRow(
+                        steps: _healthSteps,
+                        activeCalories: _healthActiveCalories,
+                      ),
+                    ],
                     const SizedBox(height: 18),
 
                     // ── 3. This Week ───────────────────────────────────────
@@ -270,6 +316,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           current: _currentBodyweight(),
                           goal: _goalBodyweight(),
                           color: IronMindTheme.accent,
+                          progressOverride: _bodyweightProgress(),
                         ),
                         const SizedBox(height: 10),
                         Align(
@@ -550,17 +597,20 @@ class _StrengthProgressRow extends StatelessWidget {
   final double current;
   final double goal;
   final Color color;
+  final double? progressOverride;
 
   const _StrengthProgressRow({
     required this.label,
     required this.current,
     required this.goal,
     required this.color,
+    this.progressOverride,
   });
 
   @override
   Widget build(BuildContext context) {
-    final progress = goal > 0 ? (current / goal).clamp(0.0, 1.0) : 0.0;
+    final progress = progressOverride ??
+        (goal > 0 ? (current / goal).clamp(0.0, 1.0) : 0.0);
     final pct = (progress * 100).round();
     final currentLabel = current > 0 ? '${current.toStringAsFixed(0)} lbs' : '—';
     final goalLabel = goal > 0 ? '${goal.toStringAsFixed(0)} lbs goal' : 'set a goal';
@@ -596,5 +646,88 @@ class _StrengthProgressRow extends StatelessWidget {
         ),
       ),
     ]);
+  }
+}
+
+class _HealthSummaryRow extends StatelessWidget {
+  final int? steps;
+  final double? activeCalories;
+
+  const _HealthSummaryRow({this.steps, this.activeCalories});
+
+  String _formatSteps(int s) {
+    if (s >= 1000) return '${(s / 1000).toStringAsFixed(1)}k';
+    return '$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IronCard(
+      child: Row(
+        children: [
+          if (steps != null) ...[
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(Icons.directions_walk, color: IronMindTheme.green, size: 16),
+                  const SizedBox(width: 6),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _formatSteps(steps!),
+                        style: GoogleFonts.dmMono(
+                          color: IronMindTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Steps',
+                        style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (activeCalories != null) ...[
+            if (steps != null)
+              Container(
+                width: 1,
+                height: 32,
+                color: IronMindTheme.border,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(Icons.local_fire_department, color: IronMindTheme.orange, size: 16),
+                  const SizedBox(width: 6),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${activeCalories!.toInt()} kcal',
+                        style: GoogleFonts.dmMono(
+                          color: IronMindTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Active',
+                        style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

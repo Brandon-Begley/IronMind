@@ -1,7 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -38,6 +43,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   double _sessionLength = 75;
   final Set<String> _equipment = <String>{};
   bool _fullGymAccess = false;
+  bool _trackingNutrition = false;
+  final _calorieController = TextEditingController(text: '2300');
+  final _proteinController = TextEditingController(text: '165');
+  final _carbsController = TextEditingController(text: '250');
+  final _fatController = TextEditingController(text: '65');
+  File? _profileImageFile;
+  String? _existingAvatarPath;
   bool _loading = true;
   bool _saving = false;
   int _step = 0;
@@ -128,39 +140,54 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       kicker: 'STEP 1',
     ),
     _OnboardingStepMeta(
+      title: 'Add a Profile Photo',
+      subtitle: 'Put a face to the name — totally optional, skip it and add one later.',
+      kicker: 'STEP 2',
+    ),
+    _OnboardingStepMeta(
       title: 'What\'s Your Experience?',
       subtitle: 'Your training level helps shape the recommendations and pacing.',
-      kicker: 'STEP 2',
+      kicker: 'STEP 3',
     ),
     _OnboardingStepMeta(
       title: 'What\'s The Main Goal?',
       subtitle: 'Choose the outcome you want this training phase to prioritize.',
-      kicker: 'STEP 3',
+      kicker: 'STEP 4',
     ),
     _OnboardingStepMeta(
       title: 'Body Snapshot',
       subtitle: 'Your weight, height, and target — the numbers that anchor everything.',
-      kicker: 'STEP 4',
+      kicker: 'STEP 5',
+    ),
+    _OnboardingStepMeta(
+      title: 'Fuel Your Training',
+      subtitle: 'Tell IronMind whether you\'re tracking food so it can support your nutrition goals.',
+      kicker: 'STEP 6',
     ),
     _OnboardingStepMeta(
       title: 'Current Strength',
       subtitle: 'Enter your best current numbers so the app has a real baseline.',
-      kicker: 'STEP 5',
+      kicker: 'STEP 7',
     ),
     _OnboardingStepMeta(
       title: 'Strength Goals',
       subtitle: 'Now set the numbers you want to chase next.',
-      kicker: 'STEP 6',
+      kicker: 'STEP 8',
     ),
     _OnboardingStepMeta(
       title: 'Training Setup',
       subtitle: 'Tell IronMind how you like to train and what your week looks like.',
-      kicker: 'STEP 7',
+      kicker: 'STEP 9',
     ),
     _OnboardingStepMeta(
       title: 'AI Workout Context',
       subtitle: 'Only share equipment the AI generator should consider when building sessions.',
-      kicker: 'STEP 8',
+      kicker: 'STEP 10',
+    ),
+    _OnboardingStepMeta(
+      title: 'You\'re All Set',
+      subtitle: 'Here\'s a quick look at what each section of IronMind does.',
+      kicker: 'STEP 11',
     ),
   ];
 
@@ -174,6 +201,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     try {
       final current = await ApiService.getLifterProfile();
       final goals = await ApiService.getStrengthGoals();
+      // Resolve avatar path outside setState (needs async)
+      String? resolvedAvatarPath;
+      final rawAvatarPath = current['avatarPath']?.toString();
+      if (rawAvatarPath != null && rawAvatarPath.isNotEmpty) {
+        if (await File(rawAvatarPath).exists()) {
+          resolvedAvatarPath = rawAvatarPath;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _nameController.text = current['name']?.toString() ?? '';
@@ -217,6 +252,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (_equipment.length == _equipmentOptions.length) {
           _fullGymAccess = true;
         }
+        _existingAvatarPath = resolvedAvatarPath;
         _loading = false;
       });
     } catch (_) {
@@ -262,13 +298,44 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         double.tryParse(_deadliftController.text.trim()) ?? 0;
     current['currentOhp'] = double.tryParse(_ohpController.text.trim()) ?? 0;
 
+    current['trackingNutrition'] = _trackingNutrition;
+
+    // Save avatar image to app documents directory
+    if (_profileImageFile != null) {
+      try {
+        final userId = await AuthService.getCurrentUserId() ?? 'local';
+        final dir = await getApplicationDocumentsDirectory();
+        final avatarDir = Directory('${dir.path}/avatars');
+        if (!avatarDir.existsSync()) avatarDir.createSync(recursive: true);
+        final dest = '${avatarDir.path}/${userId}_profile.jpg';
+        await _profileImageFile!.copy(dest);
+        current['avatarPath'] = dest;
+      } catch (_) {}
+    } else if (_existingAvatarPath != null) {
+      current['avatarPath'] = _existingAvatarPath;
+    }
+
     await ApiService.saveLifterProfile(current);
+
+    // Seed the bodyweight log so Body Metrics shows data immediately
+    final bwValue = double.tryParse(_currentWeightController.text.trim());
+    if (bwValue != null && bwValue > 0) {
+      await ApiService.logBodyweight(bwValue);
+    }
     await ApiService.saveStrengthGoals({
       'squat': int.tryParse(_goalSquatController.text.trim()) ?? 315,
       'bench': int.tryParse(_goalBenchController.text.trim()) ?? 225,
       'deadlift': int.tryParse(_goalDeadliftController.text.trim()) ?? 405,
       'ohp': int.tryParse(_goalOhpController.text.trim()) ?? 135,
     });
+    if (_trackingNutrition) {
+      await ApiService.saveNutritionTargets({
+        'calories': int.tryParse(_calorieController.text.trim()) ?? 2300,
+        'protein': int.tryParse(_proteinController.text.trim()) ?? 165,
+        'carbs': int.tryParse(_carbsController.text.trim()) ?? 250,
+        'fat': int.tryParse(_fatController.text.trim()) ?? 65,
+      });
+    }
     await ApiService.completeOnboarding();
     await widget.onComplete();
   }
@@ -277,7 +344,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     switch (_step) {
       case 0:
         if (_nameController.text.trim().isEmpty) return 'Please enter your name to continue.';
-      case 3:
+      case 4:
         if (_currentWeightController.text.trim().isEmpty) return 'Please enter your current weight.';
         if (double.tryParse(_currentWeightController.text.trim()) == null) return 'Enter a valid weight (e.g. 185).';
         if (_targetWeightController.text.trim().isNotEmpty &&
@@ -331,6 +398,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _goalBenchController.dispose();
     _goalDeadliftController.dispose();
     _goalOhpController.dispose();
+    _calorieController.dispose();
+    _proteinController.dispose();
+    _carbsController.dispose();
+    _fatController.dispose();
     super.dispose();
   }
 
@@ -498,6 +569,98 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ],
         );
       case 1:
+        final hasPhoto = _profileImageFile != null || _existingAvatarPath != null;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: GestureDetector(
+                onTap: _showImageSourceSheet,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: IronMindColors.surfaceElevated,
+                    border: Border.all(
+                      color: hasPhoto
+                          ? IronMindColors.accent
+                          : IronMindColors.border,
+                      width: hasPhoto ? 2.5 : 1.5,
+                    ),
+                    image: _profileImageFile != null
+                        ? DecorationImage(
+                            image: FileImage(_profileImageFile!),
+                            fit: BoxFit.cover,
+                          )
+                        : _existingAvatarPath != null
+                            ? DecorationImage(
+                                image: FileImage(
+                                  File(_existingAvatarPath!),
+                                ),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                  ),
+                  child: hasPhoto
+                      ? null
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.add_a_photo_outlined,
+                              color: IronMindColors.textMuted,
+                              size: 28,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'ADD PHOTO',
+                              style: GoogleFonts.dmMono(
+                                color: IronMindColors.textMuted,
+                                fontSize: 9,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (hasPhoto)
+              Center(
+                child: TextButton.icon(
+                  onPressed: _showImageSourceSheet,
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    size: 14,
+                    color: IronMindColors.accent,
+                  ),
+                  label: Text(
+                    'Change Photo',
+                    style: GoogleFonts.dmSans(
+                      color: IronMindColors.accent,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              )
+            else
+              Center(
+                child: Text(
+                  'Tap the circle to add a photo — or hit Continue to skip.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textMuted,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+          ],
+        );
+      case 2:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -524,7 +687,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
-      case 2:
+      case 3:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -551,7 +714,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
-      case 3:
+      case 4:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -604,7 +767,81 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
-      case 4:
+      case 5:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you currently tracking your food intake?',
+              style: GoogleFonts.dmSans(
+                color: IronMindColors.textSecondary,
+                fontSize: 13,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SelectionCard(
+              title: 'Yes, I Track Macros',
+              subtitle: 'Set calorie and macro targets so IronMind can support your diet.',
+              icon: Icons.track_changes_outlined,
+              selected: _trackingNutrition,
+              onTap: () => setState(() => _trackingNutrition = true),
+            ),
+            const SizedBox(height: 10),
+            _SelectionCard(
+              title: 'Not Right Now',
+              subtitle: 'Skip nutrition tracking — you can enable it any time from the Food Log tab.',
+              icon: Icons.remove_circle_outline,
+              selected: !_trackingNutrition,
+              onTap: () => setState(() => _trackingNutrition = false),
+            ),
+            if (_trackingNutrition) ...[
+              const SizedBox(height: 20),
+              _LiftField(
+                label: 'Daily Calories',
+                controller: _calorieController,
+                suffixText: 'kcal',
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _LiftField(
+                      label: 'Protein',
+                      controller: _proteinController,
+                      suffixText: 'g',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _LiftField(
+                      label: 'Carbs',
+                      controller: _carbsController,
+                      suffixText: 'g',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _LiftField(
+                      label: 'Fat',
+                      controller: _fatController,
+                      suffixText: 'g',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'You can adjust these any time from the Food Log tab.',
+                style: GoogleFonts.dmSans(
+                  color: IronMindColors.textMuted,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ],
+        );
+      case 6:
         return Column(
           children: [
             Row(
@@ -641,7 +878,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
-      case 5:
+      case 7:
         return Column(
           children: [
             Row(
@@ -681,7 +918,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
-      case 6:
+      case 8:
         return Column(
           children: [
             DropdownButtonFormField<String>(
@@ -761,7 +998,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
-      case 7:
+      case 9:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -821,9 +1058,135 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
+      case 10:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'IronMind has five sections — here\'s what each one does.',
+              style: GoogleFonts.dmSans(
+                color: IronMindColors.textSecondary,
+                fontSize: 13,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const _AppTourCard(
+              icon: Icons.fitness_center,
+              title: 'Workout',
+              description: 'Log training sessions, track sets and reps, and generate AI-built workouts tailored to your profile.',
+            ),
+            const SizedBox(height: 10),
+            const _AppTourCard(
+              icon: Icons.restaurant_outlined,
+              title: 'Food Log',
+              description: 'Log meals, track daily calories and macros, and manage your nutrition targets.',
+            ),
+            const SizedBox(height: 10),
+            const _AppTourCard(
+              icon: Icons.home_outlined,
+              title: 'Dashboard',
+              description: 'See your progress at a glance — recent workouts, strength trends, and your training summary.',
+            ),
+            const SizedBox(height: 10),
+            const _AppTourCard(
+              icon: Icons.favorite_border,
+              title: 'Wellness',
+              description: 'Log daily check-ins (sleep, mood, recovery), track body weight and measurements, and build habits.',
+            ),
+            const SizedBox(height: 10),
+            const _AppTourCard(
+              icon: Icons.person_outline,
+              title: 'Profile',
+              description: 'Update your lifter profile, strength goals, training preferences, and app settings.',
+            ),
+          ],
+        );
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  Future<void> _pickProfileImage({required ImageSource source}) async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 512,
+        maxHeight: 512,
+      );
+      if (picked == null) return;
+      setState(() => _profileImageFile = File(picked.path));
+    } catch (_) {}
+  }
+
+  void _showImageSourceSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        decoration: const BoxDecoration(
+          color: IronMindColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: IronMindColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'CHOOSE PHOTO',
+              style: GoogleFonts.bebasNeue(
+                color: IronMindColors.textPrimary,
+                fontSize: 20,
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 20),
+            _ImageSourceTile(
+              icon: Icons.photo_library_outlined,
+              label: 'Photo Library',
+              onTap: () {
+                Navigator.pop(context);
+                _pickProfileImage(source: ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 10),
+            _ImageSourceTile(
+              icon: Icons.camera_alt_outlined,
+              label: 'Take Photo',
+              onTap: () {
+                Navigator.pop(context);
+                _pickProfileImage(source: ImageSource.camera);
+              },
+            ),
+            if (_profileImageFile != null || _existingAvatarPath != null) ...[
+              const SizedBox(height: 10),
+              _ImageSourceTile(
+                icon: Icons.delete_outline,
+                label: 'Remove Photo',
+                color: IronMindColors.alert,
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _profileImageFile = null;
+                    _existingAvatarPath = null;
+                  });
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _pickBirthDate() async {
@@ -1345,6 +1708,113 @@ class _LiftField extends StatelessWidget {
       onSubmitted: (_) => FocusScope.of(context).nextFocus(),
       style: GoogleFonts.dmMono(color: IronMindColors.textPrimary),
       decoration: InputDecoration(labelText: label, suffixText: suffixText),
+    );
+  }
+}
+
+class _AppTourCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String description;
+
+  const _AppTourCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: IronMindColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: IronMindColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: IronMindColors.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, color: IronMindColors.accent, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.bebasNeue(
+                    color: IronMindColors.textPrimary,
+                    fontSize: 16,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  description,
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textSecondary,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImageSourceTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _ImageSourceTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color = IronMindColors.textPrimary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: IronMindColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: IronMindColors.border),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 14),
+            Text(
+              label,
+              style: GoogleFonts.dmSans(
+                color: color,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

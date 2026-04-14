@@ -47,6 +47,14 @@
 			</array>
 		</dict>
 	</dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>IronMind uses your photo library to let you set a profile picture.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>IronMind uses your camera to let you take a profile picture.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>IronMind reads your steps, sleep, heart rate, active calories, and body weight to keep your wellness data in sync.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>IronMind writes your body weight, water intake, and workout sessions to Apple Health.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../services/api_service.dart';
+import '../services/health_service.dart';
 
 class NutritionScreen extends StatefulWidget {
   final bool connected;
@@ -203,6 +204,7 @@ class _TodayTabState extends State<_TodayTab> {
 
   Future<void> _setWater(int glasses) async {
     await ApiService.setWaterGlasses(widget.date, glasses);
+    await HealthService.instance.writeWater(glasses);
     setState(() => _waterGlasses = glasses.clamp(0, 20));
   }
 

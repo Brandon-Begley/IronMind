@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/api_service.dart';
+import '../services/health_service.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'habits_tab.dart';
@@ -22,6 +23,11 @@ class _WellnessScreenState extends State<WellnessScreen>
   List<Map<String, dynamic>> _measurements = [];
   Map<String, dynamic> _profile = {};
   bool _loading = true;
+
+  // Health data (null when not connected or unavailable)
+  double? _healthSleepHours;
+  double? _healthRestingHR;
+  double? _healthWeight;
 
   @override
   void initState() {
@@ -48,6 +54,30 @@ class _WellnessScreenState extends State<WellnessScreen>
       _measurements = measurements;
       _profile = profile;
       _loading = false;
+    });
+
+    // Load health data independently so it doesn't block the screen paint
+    if (HealthService.instance.isConnected) {
+      final sleep  = await HealthService.instance.getLastNightSleepHours();
+      final hr     = await HealthService.instance.getRestingHeartRate();
+      final weight = await HealthService.instance.getLatestWeight();
+      if (!mounted) return;
+      setState(() {
+        _healthSleepHours = sleep;
+        _healthRestingHR  = hr;
+        _healthWeight     = weight;
+      });
+    }
+  }
+
+  bool _hasLoggedWeightToday() {
+    final today = DateTime.now();
+    return _bodyweightLogs.any((log) {
+      final d = DateTime.tryParse(log['date']?.toString() ?? '');
+      return d != null &&
+          d.year == today.year &&
+          d.month == today.month &&
+          d.day == today.day;
     });
   }
 
@@ -129,6 +159,14 @@ class _WellnessScreenState extends State<WellnessScreen>
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       children: [
+        if (HealthService.instance.isConnected &&
+            (_healthSleepHours != null || _healthRestingHR != null)) ...[
+          _HealthCheckInBanner(
+            sleepHours: _healthSleepHours,
+            restingHR: _healthRestingHR,
+          ),
+          const SizedBox(height: 12),
+        ],
         _CheckInHero(
           latestLog: _wellnessLogs.isEmpty ? null : _wellnessLogs.first,
           alreadyToday: alreadyToday,
@@ -325,6 +363,19 @@ class _WellnessScreenState extends State<WellnessScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (HealthService.instance.isConnected &&
+            _healthWeight != null &&
+            !_hasLoggedWeightToday()) ...[
+          _HealthWeightBanner(
+            weight: _healthWeight!,
+            onImport: () async {
+              await ApiService.logBodyweight(_healthWeight!);
+              await HealthService.instance.writeWeight(_healthWeight!);
+              await _load();
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
         _BodyMetricsHero(
           latestWeight: latestWeight,
           goalWeight: goalWeight,
@@ -601,7 +652,7 @@ class _WellnessScreenState extends State<WellnessScreen>
   }
 
   void _logWellness() {
-    int sleep = 7;
+    int sleep = (_healthSleepHours?.round() ?? 7).clamp(3, 12);
     int stress = 3;
     int mood = 7;
     int energy = 7;
@@ -770,6 +821,7 @@ class _WellnessScreenState extends State<WellnessScreen>
                   final weight = double.tryParse(controller.text);
                   if (weight != null) {
                     await ApiService.logBodyweight(weight);
+                    await HealthService.instance.writeWeight(weight);
                     await _load();
                     if (mounted) Navigator.of(context).pop();
                   }
@@ -1626,4 +1678,177 @@ class _LegendDot extends StatelessWidget {
           ),
         ],
       );
+}
+
+// ── Health data banners ────────────────────────────────────────────────────
+
+class _HealthCheckInBanner extends StatelessWidget {
+  final double? sleepHours;
+  final double? restingHR;
+
+  const _HealthCheckInBanner({this.sleepHours, this.restingHR});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: IronMindColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: IronMindColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.health_and_safety_outlined,
+                  color: IronMindColors.accent, size: 14),
+              const SizedBox(width: 6),
+              Text(
+                'FROM HEALTH',
+                style: GoogleFonts.dmMono(
+                  color: IronMindColors.accent,
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              if (sleepHours != null) ...[
+                _HealthChip(
+                  icon: Icons.bedtime_outlined,
+                  value: '${sleepHours!.toStringAsFixed(1)}h',
+                  label: 'Sleep',
+                  color: IronMindColors.accent,
+                ),
+                const SizedBox(width: 10),
+              ],
+              if (restingHR != null)
+                _HealthChip(
+                  icon: Icons.favorite_border,
+                  value: '${restingHR!.toInt()} bpm',
+                  label: 'Resting HR',
+                  color: IronMindColors.alert,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HealthWeightBanner extends StatelessWidget {
+  final double weight;
+  final VoidCallback onImport;
+
+  const _HealthWeightBanner({required this.weight, required this.onImport});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: IronMindColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: IronMindColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.health_and_safety_outlined,
+              color: IronMindColors.accent, size: 16),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${weight.toStringAsFixed(1)} lbs — from Health',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  'No weight logged today',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textMuted,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: onImport,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: IronMindColors.accent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'IMPORT',
+                style: GoogleFonts.bebasNeue(
+                  color: IronMindColors.background,
+                  fontSize: 13,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HealthChip extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final Color color;
+
+  const _HealthChip({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 14),
+        const SizedBox(width: 4),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: GoogleFonts.dmMono(
+                color: IronMindColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              label,
+              style: GoogleFonts.dmSans(
+                color: IronMindColors.textMuted,
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }

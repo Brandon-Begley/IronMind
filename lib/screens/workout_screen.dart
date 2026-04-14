@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,6 +7,7 @@ import 'exercise_library_screen.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../services/api_service.dart';
+import '../services/health_service.dart';
 
 class WorkoutScreen extends StatefulWidget {
   final bool connected;
@@ -23,6 +25,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   String _sessionPlan = '';
   final List<_ExerciseEntry> _exercises = [];
 
+  // Global rest timer
+  bool _resting = false;
+  int _restSeconds = 0;
+  int _restTotal = 0;
+  String _restExercise = '';
+  Timer? _restTimer;
+
   @override
   void initState() {
     super.initState();
@@ -31,7 +40,33 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _restTimer?.cancel();
     super.dispose();
+  }
+
+  void _startGlobalRest(int seconds, String exercise) {
+    _restTimer?.cancel();
+    setState(() {
+      _resting = true;
+      _restSeconds = seconds;
+      _restTotal = seconds;
+      _restExercise = exercise.trim();
+    });
+    _restTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) { t.cancel(); return; }
+      if (_restSeconds <= 0) {
+        t.cancel();
+        setState(() => _resting = false);
+        HapticFeedback.heavyImpact();
+      } else {
+        setState(() => _restSeconds--);
+      }
+    });
+  }
+
+  void _stopRest() {
+    _restTimer?.cancel();
+    if (mounted) setState(() => _resting = false);
   }
 
   String get _timerLabel {
@@ -47,6 +82,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     List<_ExerciseEntry>? exercises,
   }) {
     _timer?.cancel();
+    _stopRest();
     final nextExercises = exercises == null || exercises.isEmpty
         ? <_ExerciseEntry>[_ExerciseEntry()]
         : exercises;
@@ -492,6 +528,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   void _finishWorkout() async {
     _timer?.cancel();
+    _stopRest();
     final summaryExercises = _exercises.where((e) => e.name.isNotEmpty).toList();
     final capturedElapsed = _elapsed;
     final capturedName = _workoutName;
@@ -515,6 +552,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           'focus': muscleGroups.join(', '),
           'exercises': data,
           'notes': _sessionPlan,
+        });
+        await HealthService.instance.writeWorkout({
+          'exercises': data,
+          'elapsed': capturedElapsed,
         });
       } catch (_) {
         if (mounted)
@@ -588,10 +629,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ),
         ],
       ),
-      body: _workoutActive
-          ? _ActiveWorkoutTab(
+      body: Stack(
+        children: [
+          if (_workoutActive)
+          _ActiveWorkoutTab(
               sessionPlan: _sessionPlan,
               exercises: _exercises,
+              onRestStart: _startGlobalRest,
               onNameChanged: (v) => setState(() => _workoutName = v),
               onAddExercise: () =>
                   setState(() => _exercises.add(_ExerciseEntry())),
@@ -623,13 +667,28 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 );
               },
             )
-          : _WorkoutHomeTab(
+          else
+            _WorkoutHomeTab(
               key: ValueKey('workout-log-$_routineRefreshTick'),
               onStartEmptyWorkout: _startEmptyWorkout,
               onCreateRoutine: _showCreateRoutineSheet,
               onStartRoutine: _startRoutine,
               onOpenAiGenerator: _showAiWorkoutPrompt,
             ),
+          if (_resting)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _RestTimerOverlay(
+                seconds: _restSeconds,
+                total: _restTotal,
+                exercise: _restExercise,
+                onSkip: _stopRest,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -1017,6 +1076,7 @@ class _ActiveWorkoutTab extends StatelessWidget {
   final VoidCallback onAddExercise, onUpdate;
   final VoidCallback? onOpenOneRepMax;
   final void Function(Function(String) onSelect) openLibrary;
+  final void Function(int seconds, String exercise) onRestStart;
   const _ActiveWorkoutTab({
     required this.sessionPlan,
     required this.exercises,
@@ -1024,6 +1084,7 @@ class _ActiveWorkoutTab extends StatelessWidget {
     required this.onAddExercise,
     required this.onUpdate,
     required this.openLibrary,
+    required this.onRestStart,
     this.onOpenOneRepMax,
   });
 
@@ -1073,6 +1134,7 @@ class _ActiveWorkoutTab extends StatelessWidget {
               entry: e.value,
               onUpdate: onUpdate,
               openLibrary: openLibrary,
+              onRestStart: onRestStart,
               onPr: (highlight) {
                 final weightLabel = highlight.weight.truncateToDouble() ==
                         highlight.weight
@@ -1135,11 +1197,13 @@ class _ExerciseCard extends StatefulWidget {
   final ValueChanged<_PrHighlight> onPr;
   final VoidCallback? onRemove;
   final void Function(Function(String) onSelect) openLibrary;
+  final void Function(int seconds, String exercise) onRestStart;
   const _ExerciseCard({
     required this.entry,
     required this.onUpdate,
     required this.onPr,
     required this.openLibrary,
+    required this.onRestStart,
     this.onRemove,
   });
   @override
@@ -1147,10 +1211,6 @@ class _ExerciseCard extends StatefulWidget {
 }
 
 class _ExerciseCardState extends State<_ExerciseCard> {
-  Timer? _restTimer;
-  int _restSeconds = 0;
-  bool _resting = false;
-
   Future<void> _handleCompletedSet(_SetEntry set) async {
     final exercise = widget.entry.name.trim();
     if (set.prTracked || exercise.isEmpty || set.weight <= 0 || set.reps <= 0) {
@@ -1169,29 +1229,6 @@ class _ExerciseCardState extends State<_ExerciseCard> {
         estimatedOneRepMax: ApiService.calculate1RM(set.weight, set.reps).round(),
       ),
     );
-  }
-
-  void _startRest(int s) {
-    _restTimer?.cancel();
-    setState(() {
-      _resting = true;
-      _restSeconds = s;
-    });
-    _restTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (_restSeconds <= 0) {
-        t.cancel();
-        setState(() => _resting = false);
-        HapticFeedback.heavyImpact();
-      } else {
-        setState(() => _restSeconds--);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _restTimer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -1239,48 +1276,6 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               ],
             ],
           ),
-          if (_resting) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: IronMindTheme.accentDim,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'REST',
-                    style: GoogleFonts.dmMono(
-                      color: IronMindTheme.accent,
-                      fontSize: 10,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  Text(
-                    '${_restSeconds}s',
-                    style: GoogleFonts.bebasNeue(
-                      color: IronMindTheme.accent,
-                      fontSize: 22,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      _restTimer?.cancel();
-                      setState(() => _resting = false);
-                    },
-                    child: const Icon(
-                      Icons.close,
-                      color: IronMindTheme.accent,
-                      size: 16,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -1415,7 +1410,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                       setState(() => s.done = !s.done);
                       if (s.done) {
                         HapticFeedback.mediumImpact();
-                        _startRest(90);
+                        widget.onRestStart(90, widget.entry.name.trim());
                         if (s.weight > 0 && s.reps > 0) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -1553,7 +1548,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     (s) => GestureDetector(
                       onTap: () {
                         Navigator.pop(context);
-                        _startRest(s);
+                        widget.onRestStart(s, widget.entry.name.trim());
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -4195,4 +4190,165 @@ class _SummaryStatChip extends StatelessWidget {
     );
     return wide ? SizedBox(width: double.infinity, child: content) : Expanded(child: content);
   }
+}
+
+// ── Rest Timer Overlay ────────────────────────────────────────────────────────
+class _RestTimerOverlay extends StatelessWidget {
+  final int seconds;
+  final int total;
+  final String exercise;
+  final VoidCallback onSkip;
+
+  const _RestTimerOverlay({
+    required this.seconds,
+    required this.total,
+    required this.exercise,
+    required this.onSkip,
+  });
+
+  String get _label {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return m > 0 ? '$m:${s.toString().padLeft(2, '0')}' : '${s}s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = total > 0 ? seconds / total : 0.0;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0E1E2C),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: IronMindTheme.accent.withValues(alpha: 0.35),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: CustomPaint(
+                    painter: _ArcPainter(progress: progress),
+                    child: Center(
+                      child: Text(
+                        _label,
+                        style: GoogleFonts.bebasNeue(
+                          color: IronMindTheme.accent,
+                          fontSize: 15,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'REST',
+                        style: GoogleFonts.dmMono(
+                          color: IronMindTheme.accent,
+                          fontSize: 10,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      if (exercise.isNotEmpty)
+                        Text(
+                          exercise,
+                          style: GoogleFonts.dmSans(
+                            color: IronMindTheme.text2,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: onSkip,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: IronMindTheme.accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: IronMindTheme.accent.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Text(
+                      'SKIP',
+                      style: GoogleFonts.bebasNeue(
+                        color: IronMindTheme.accent,
+                        fontSize: 14,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ArcPainter extends CustomPainter {
+  final double progress;
+  const _ArcPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.shortestSide / 2) - 4;
+    const strokeWidth = 3.5;
+
+    final trackPaint = Paint()
+      ..color = IronMindTheme.accent.withValues(alpha: 0.15)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(center, radius, trackPaint);
+
+    final arcPaint = Paint()
+      ..color = IronMindTheme.accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      2 * math.pi * progress,
+      false,
+      arcPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ArcPainter old) => old.progress != progress;
 }

@@ -9,7 +9,9 @@ import 'screens/onboarding_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/wellness_screen.dart';
 import 'screens/workout_screen.dart';
+import 'services/api_service.dart';
 import 'services/auth_service.dart';
+import 'services/health_service.dart';
 import 'services/supabase_service.dart';
 import 'theme.dart';
 
@@ -17,6 +19,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await SupabaseService.initialize();
+  await HealthService.initialize();
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -147,6 +150,26 @@ class _MainShellState extends State<MainShell> {
   int _selectedIndex = 2;
   int _profileRefreshTick = 0;
   int _dashboardRefreshTick = 0;
+  bool _trackingNutrition = true; // show until we know otherwise
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNutritionPreference();
+  }
+
+  Future<void> _loadNutritionPreference() async {
+    final profile = await ApiService.getProfile();
+    if (!mounted) return;
+    final tracking = profile['trackingNutrition'];
+    // Treat null (not set — legacy users) as true so Food Log stays visible
+    final isTracking = tracking != false;
+    setState(() {
+      _trackingNutrition = isTracking;
+      // If Food Log is currently selected but now hidden, go to Dashboard
+      if (!isTracking && _selectedIndex == 1) _selectedIndex = 2;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +182,12 @@ class _MainShellState extends State<MainShell> {
         key: ValueKey(_profileRefreshTick),
         onSignOut: widget.onSignOut,
         onRedoOnboarding: widget.onRedoOnboarding,
+        onNutritionTrackingChanged: (tracking) {
+          setState(() {
+            _trackingNutrition = tracking;
+            if (!tracking && _selectedIndex == 1) _selectedIndex = 2;
+          });
+        },
       ),
     ];
 
@@ -197,12 +226,13 @@ class _MainShellState extends State<MainShell> {
                 selected: _selectedIndex == 0,
                 onTap: () => setState(() => _selectedIndex = 0),
               ),
-              _NavItem(
-                icon: Icons.restaurant_outlined,
-                label: 'Food Log',
-                selected: _selectedIndex == 1,
-                onTap: () => setState(() => _selectedIndex = 1),
-              ),
+              if (_trackingNutrition)
+                _NavItem(
+                  icon: Icons.restaurant_outlined,
+                  label: 'Food Log',
+                  selected: _selectedIndex == 1,
+                  onTap: () => setState(() => _selectedIndex = 1),
+                ),
               _NavItem(
                 icon: Icons.home_outlined,
                 label: 'Dashboard',

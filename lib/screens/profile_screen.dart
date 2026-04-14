@@ -1,18 +1,26 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
+import '../services/health_service.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
 class ProfileScreen extends StatefulWidget {
   final Future<void> Function() onSignOut;
   final Future<void> Function() onRedoOnboarding;
+  final void Function(bool tracking)? onNutritionTrackingChanged;
 
   const ProfileScreen({
     super.key,
     required this.onSignOut,
     required this.onRedoOnboarding,
+    this.onNutritionTrackingChanged,
   });
 
   @override
@@ -28,6 +36,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   int _bestStreakDays = 0;
   int _totalWorkouts = 0;
   bool _loading = true;
+  bool _healthConnected = false;
+  String? _avatarPath;
 
   @override
   void initState() {
@@ -58,6 +68,13 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (s > bestStreak) bestStreak = s;
     }
 
+    // Resolve avatar path outside setState (needs async file check)
+    String? resolvedAvatar;
+    final rawAvatar = profile['avatarPath']?.toString();
+    if (rawAvatar != null && rawAvatar.isNotEmpty) {
+      if (await File(rawAvatar).exists()) resolvedAvatar = rawAvatar;
+    }
+
     if (!mounted) return;
     setState(() {
       _profile = profile;
@@ -65,6 +82,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       _logs = logs;
       _bestStreakDays = bestStreak;
       _totalWorkouts = logs.length;
+      _healthConnected = HealthService.instance.isConnected;
+      _avatarPath = resolvedAvatar;
       _loading = false;
     });
   }
@@ -202,6 +221,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           sessionLength: sessionLength == null
               ? '—'
               : '${(sessionLength as num).round()} min',
+          avatarPath: _avatarPath,
+          onEditAvatar: _showPhotoSourceSheet,
         ),
         const SizedBox(height: 12),
         // ── Lifetime stats ────────────────────────────────────────────────
@@ -374,10 +395,14 @@ class _ProfileScreenState extends State<ProfileScreen>
           label: 'Body Metrics Live In Wellness',
           onTap: _goToWellnessMessage,
         ),
-        _SettingsRow(
-          icon: Icons.health_and_safety_outlined,
-          label: 'Connect Apple Health',
-          onTap: _connectAppleHealth,
+        _HealthConnectRow(
+          connected: _healthConnected,
+          onConnect: _handleHealthConnect,
+          onDisconnect: _handleHealthDisconnect,
+        ),
+        _NutritionTrackingRow(
+          tracking: _profile['trackingNutrition'] != false,
+          onToggle: _toggleNutritionTracking,
         ),
         const SizedBox(height: 20),
         const Divider(color: IronMindColors.border),
@@ -497,14 +522,214 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  void _editProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Use Redo Onboarding to update your profile setup.',
-          style: GoogleFonts.dmSans(),
+  Future<void> _pickAndSavePhoto(ImageSource source) async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 512,
+        maxHeight: 512,
+      );
+      if (picked == null || !mounted) return;
+      final userId = await AuthService.getCurrentUserId() ?? 'local';
+      final dir = await getApplicationDocumentsDirectory();
+      final avatarDir = Directory('${dir.path}/avatars');
+      if (!avatarDir.existsSync()) avatarDir.createSync(recursive: true);
+      final dest = '${avatarDir.path}/${userId}_profile.jpg';
+      await File(picked.path).copy(dest);
+      final current = await ApiService.getProfile();
+      current['avatarPath'] = dest;
+      await ApiService.saveProfile(current);
+      if (!mounted) return;
+      setState(() => _avatarPath = dest);
+    } catch (_) {}
+  }
+
+  void _showPhotoSourceSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        decoration: const BoxDecoration(
+          color: IronMindColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        backgroundColor: IronMindColors.surfaceElevated,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: IronMindColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'PROFILE PHOTO',
+              style: GoogleFonts.bebasNeue(
+                color: IronMindColors.textPrimary,
+                fontSize: 20, letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 20),
+            _PhotoSourceTile(
+              icon: Icons.photo_library_outlined,
+              label: 'Photo Library',
+              onTap: () { Navigator.pop(context); _pickAndSavePhoto(ImageSource.gallery); },
+            ),
+            const SizedBox(height: 10),
+            _PhotoSourceTile(
+              icon: Icons.camera_alt_outlined,
+              label: 'Take Photo',
+              onTap: () { Navigator.pop(context); _pickAndSavePhoto(ImageSource.camera); },
+            ),
+            if (_avatarPath != null) ...[
+              const SizedBox(height: 10),
+              _PhotoSourceTile(
+                icon: Icons.delete_outline,
+                label: 'Remove Photo',
+                color: IronMindColors.alert,
+                onTap: () async {
+                  Navigator.pop(context);
+                  final current = await ApiService.getProfile();
+                  current.remove('avatarPath');
+                  await ApiService.saveProfile(current);
+                  if (mounted) setState(() => _avatarPath = null);
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _editProfile() {
+    final nameCtrl = TextEditingController(
+      text: (_profile['name'] ?? '').toString(),
+    );
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          decoration: const BoxDecoration(
+            color: IronMindColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: StatefulBuilder(
+            builder: (ctx, setModal) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36, height: 4,
+                    decoration: BoxDecoration(
+                      color: IronMindColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'EDIT PROFILE',
+                  style: GoogleFonts.bebasNeue(
+                    color: IronMindColors.textPrimary,
+                    fontSize: 22, letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // Avatar
+                Center(
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showPhotoSourceSheet();
+                    },
+                    child: Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 44,
+                          backgroundColor: IronMindColors.surfaceElevated,
+                          backgroundImage: _avatarPath != null
+                              ? FileImage(File(_avatarPath!))
+                              : null,
+                          child: _avatarPath == null
+                              ? const Icon(
+                                  Icons.person,
+                                  color: IronMindColors.textMuted,
+                                  size: 36,
+                                )
+                              : null,
+                        ),
+                        Positioned(
+                          right: 0, bottom: 0,
+                          child: Container(
+                            width: 26, height: 26,
+                            decoration: BoxDecoration(
+                              color: IronMindColors.accent,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: IronMindColors.surface, width: 2,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.edit,
+                              color: IronMindColors.background,
+                              size: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    'Tap to change photo',
+                    style: GoogleFonts.dmSans(
+                      color: IronMindColors.textMuted, fontSize: 11,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: nameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  style: GoogleFonts.dmSans(color: IronMindColors.textPrimary),
+                  decoration: const InputDecoration(labelText: 'Display Name'),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final name = nameCtrl.text.trim();
+                      if (name.isEmpty) return;
+                      final current = await ApiService.getProfile();
+                      current['name'] = name;
+                      await ApiService.saveProfile(current);
+                      if (!mounted) return;
+                      setState(() => _profile = {..._profile, 'name': name});
+                      Navigator.pop(context);
+                    },
+                    child: Text(
+                      'SAVE',
+                      style: GoogleFonts.bebasNeue(fontSize: 16, letterSpacing: 1.5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -535,16 +760,42 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  void _connectAppleHealth() {
+  Future<void> _handleHealthConnect() async {
+    final granted = await HealthService.instance.connect();
+    if (!mounted) return;
+    setState(() => _healthConnected = granted);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Apple Health integration is a planned next step.',
+          granted
+              ? 'Health connected — data will sync on next load.'
+              : 'Permission not granted. You can enable it in device Settings.',
           style: GoogleFonts.dmSans(),
         ),
-        backgroundColor: IronMindColors.surfaceElevated,
+        backgroundColor: granted
+            ? IronMindColors.surfaceElevated
+            : IronMindColors.alert,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       ),
     );
+  }
+
+  Future<void> _handleHealthDisconnect() async {
+    await HealthService.instance.disconnect();
+    if (!mounted) return;
+    setState(() => _healthConnected = false);
+  }
+
+  Future<void> _toggleNutritionTracking() async {
+    final current = await ApiService.getProfile();
+    final nowTracking = current['trackingNutrition'] == false; // flip it
+    current['trackingNutrition'] = nowTracking;
+    await ApiService.saveLifterProfile(current);
+    if (!mounted) return;
+    setState(() => _profile = current);
+    widget.onNutritionTrackingChanged?.call(nowTracking);
   }
 
   void _signOut() async {
@@ -597,6 +848,173 @@ class _SettingsRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _HealthConnectRow extends StatelessWidget {
+  final bool connected;
+  final VoidCallback onConnect;
+  final VoidCallback onDisconnect;
+
+  const _HealthConnectRow({
+    required this.connected,
+    required this.onConnect,
+    required this.onDisconnect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: IronMindColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: connected ? IronMindColors.success : IronMindColors.border,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            connected ? Icons.check_circle : Icons.health_and_safety_outlined,
+            color: connected ? IronMindColors.success : IronMindColors.textPrimary,
+            size: 18,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  connected ? 'Health Connected' : 'Connect Health',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  connected
+                      ? 'Syncing steps, sleep, HR & weight'
+                      : 'Sync steps, sleep, calories & more',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textMuted,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (connected)
+            GestureDetector(
+              onTap: onDisconnect,
+              child: Text(
+                'Disconnect',
+                style: GoogleFonts.dmSans(
+                  color: IronMindColors.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+            )
+          else
+            GestureDetector(
+              onTap: onConnect,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: IronMindColors.accent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'CONNECT',
+                  style: GoogleFonts.bebasNeue(
+                    color: IronMindColors.background,
+                    fontSize: 13,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NutritionTrackingRow extends StatelessWidget {
+  final bool tracking;
+  final VoidCallback onToggle;
+
+  const _NutritionTrackingRow({
+    required this.tracking,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: IronMindColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: IronMindColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.restaurant_outlined, color: IronMindColors.textPrimary, size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Food Log',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  tracking ? 'Visible in navigation' : 'Hidden from navigation',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textMuted,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: onToggle,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 44,
+              height: 24,
+              decoration: BoxDecoration(
+                color: tracking ? IronMindColors.accent : IronMindColors.border,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 180),
+                alignment: tracking ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  margin: const EdgeInsets.all(3),
+                  width: 18,
+                  height: 18,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -701,6 +1119,8 @@ class _HeroCard extends StatelessWidget {
   final String currentWeight;
   final String targetWeight;
   final String sessionLength;
+  final String? avatarPath;
+  final VoidCallback? onEditAvatar;
 
   const _HeroCard({
     required this.name,
@@ -709,12 +1129,14 @@ class _HeroCard extends StatelessWidget {
     required this.currentWeight,
     required this.targetWeight,
     required this.sessionLength,
+    this.avatarPath,
+    this.onEditAvatar,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF101924), Color(0xFF17354D)],
@@ -729,23 +1151,84 @@ class _HeroCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            name == '—' ? 'IRONMIND ATHLETE' : name.toUpperCase(),
-            style: GoogleFonts.bebasNeue(
-              color: IronMindColors.textPrimary,
-              fontSize: 24,
-              letterSpacing: 2,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Avatar
+              GestureDetector(
+                onTap: onEditAvatar,
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 34,
+                      backgroundColor: IronMindColors.surfaceElevated,
+                      backgroundImage: avatarPath != null
+                          ? FileImage(File(avatarPath!))
+                          : null,
+                      child: avatarPath == null
+                          ? const Icon(
+                              Icons.person,
+                              color: IronMindColors.textMuted,
+                              size: 30,
+                            )
+                          : null,
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: IronMindColors.accent,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFF101924),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.edit,
+                          color: IronMindColors.background,
+                          size: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              // Name + goal
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name == '—' ? 'IRONMIND ATHLETE' : name.toUpperCase(),
+                      style: GoogleFonts.bebasNeue(
+                        color: IronMindColors.textPrimary,
+                        fontSize: 22,
+                        letterSpacing: 2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '$goal • $style',
+                      style: GoogleFonts.dmSans(
+                        color: IronMindColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            '$goal • $style',
-            style: GoogleFonts.dmSans(
-              color: IronMindColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(child: _HeroMetric(label: 'Current', value: currentWeight)),
@@ -1155,6 +1638,49 @@ class _GoalFieldInline extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PhotoSourceTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _PhotoSourceTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color = IronMindColors.textPrimary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: IronMindColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: IronMindColors.border),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 14),
+            Text(
+              label,
+              style: GoogleFonts.dmSans(
+                color: color,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
