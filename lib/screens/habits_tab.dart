@@ -32,13 +32,6 @@ final List<_BuiltInHabit> _builtInHabits = [
     getDates: ApiService.getWorkoutLoggedDates,
   ),
   _BuiltInHabit(
-    id: '__nutrition__',
-    name: 'Log meals',
-    icon: '🥗',
-    color: IronMindColors.success,
-    getDates: () => ApiService.getNutritionLoggedDates(lookbackDays: 91),
-  ),
-  _BuiltInHabit(
     id: '__checkin__',
     name: 'Daily check-in',
     icon: '💙',

@@ -4,12 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'screens/auth_screen.dart';
 import 'screens/dashboard_screen.dart';
-import 'screens/nutrition_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/trainer_screen.dart';
 import 'screens/wellness_screen.dart';
 import 'screens/workout_screen.dart';
-import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/health_service.dart';
 import 'services/supabase_service.dart';
@@ -147,47 +146,21 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  int _selectedIndex = 2;
+  int _selectedIndex = 0; // default to Dashboard
   int _profileRefreshTick = 0;
   int _dashboardRefreshTick = 0;
-  bool _trackingNutrition = true; // show until we know otherwise
-
-  @override
-  void initState() {
-    super.initState();
-    _loadNutritionPreference();
-  }
-
-  Future<void> _loadNutritionPreference() async {
-    final profile = await ApiService.getProfile();
-    if (!mounted) return;
-    final tracking = profile['trackingNutrition'];
-    // Treat null (not set — legacy users) as true so Food Log stays visible
-    final isTracking = tracking != false;
-    setState(() {
-      _trackingNutrition = isTracking;
-      // If Food Log is currently selected but now hidden, go to Dashboard
-      if (!isTracking && _selectedIndex == 1) _selectedIndex = 2;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     final screens = [
-      const WorkoutScreen(connected: true),
-      const NutritionScreen(connected: true),
       DashboardScreen(key: ValueKey(_dashboardRefreshTick), connected: true),
+      const TrainerScreen(),
+      const WorkoutScreen(connected: true),
       const WellnessScreen(),
       ProfileScreen(
         key: ValueKey(_profileRefreshTick),
         onSignOut: widget.onSignOut,
         onRedoOnboarding: widget.onRedoOnboarding,
-        onNutritionTrackingChanged: (tracking) {
-          setState(() {
-            _trackingNutrition = tracking;
-            if (!tracking && _selectedIndex == 1) _selectedIndex = 2;
-          });
-        },
       ),
     ];
 
@@ -200,16 +173,21 @@ class _MainShellState extends State<MainShell> {
 
   Widget _buildBottomNav() {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 14),
       decoration: BoxDecoration(
-        color: IronMindColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: IronMindColors.border),
+        color: const Color(0xFF111114),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFF2A2A32)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.22),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: Colors.black.withOpacity(0.45),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: IronMindColors.accent.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 0),
           ),
         ],
       ),
@@ -221,26 +199,26 @@ class _MainShellState extends State<MainShell> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _NavItem(
-                icon: Icons.fitness_center,
-                label: 'Workout',
-                selected: _selectedIndex == 0,
-                onTap: () => setState(() => _selectedIndex = 0),
-              ),
-              if (_trackingNutrition)
-                _NavItem(
-                  icon: Icons.restaurant_outlined,
-                  label: 'Food Log',
-                  selected: _selectedIndex == 1,
-                  onTap: () => setState(() => _selectedIndex = 1),
-                ),
-              _NavItem(
                 icon: Icons.home_outlined,
                 label: 'Dashboard',
-                selected: _selectedIndex == 2,
+                selected: _selectedIndex == 0,
                 onTap: () => setState(() {
                   _dashboardRefreshTick++;
-                  _selectedIndex = 2;
+                  _selectedIndex = 0;
                 }),
+              ),
+              _NavItem(
+                icon: Icons.auto_awesome,
+                label: 'Trainer',
+                selected: _selectedIndex == 1,
+                onTap: () => setState(() => _selectedIndex = 1),
+              ),
+              _NavItem(
+                icon: Icons.fitness_center,
+                label: 'Workout',
+                selected: _selectedIndex == 2,
+                rotate: true,
+                onTap: () => setState(() => _selectedIndex = 2),
               ),
               _NavItem(
                 icon: Icons.favorite_border,
@@ -269,6 +247,7 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool selected;
+  final bool rotate;
   final VoidCallback onTap;
 
   const _NavItem({
@@ -276,6 +255,7 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.rotate = false,
   });
 
   @override
@@ -290,20 +270,29 @@ class _NavItem extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          color: selected ? IronMindColors.accentDim : Colors.transparent,
+          gradient: selected
+              ? LinearGradient(
+                  colors: [
+                    IronMindColors.accent.withOpacity(0.22),
+                    IronMindColors.accent.withOpacity(0.08),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                )
+              : null,
           borderRadius: BorderRadius.circular(14),
           border: selected
-              ? Border.all(color: IronMindColors.accent.withOpacity(0.35))
+              ? Border.all(color: IronMindColors.accent.withOpacity(0.30))
               : null,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            icon == Icons.fitness_center
+            rotate
                 ? Transform.rotate(angle: -0.78, child: iconWidget)
                 : iconWidget,
             const SizedBox(height: 4),
@@ -311,10 +300,11 @@ class _NavItem extends StatelessWidget {
               label,
               style: GoogleFonts.dmSans(
                 color: selected
-                    ? IronMindColors.textPrimary
+                    ? IronMindColors.accent
                     : IronMindColors.textMuted,
                 fontSize: 10,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                letterSpacing: selected ? 0.3 : 0,
               ),
             ),
           ],

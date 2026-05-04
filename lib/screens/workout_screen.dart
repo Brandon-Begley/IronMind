@@ -4,10 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'exercise_library_screen.dart';
+import 'workout_summary_screen.dart';
 import '../theme.dart';
+import '../widgets/muscle_body_map.dart' show computeMuscleSetMap;
 import '../widgets/common.dart';
+import '../widgets/import_program_sheet.dart';
 import '../services/api_service.dart';
 import '../services/health_service.dart';
+
+void _doShowImportSheet(BuildContext context, {required VoidCallback onRefresh}) {
+  showImportProgramSheet(
+    context,
+    onRoutinesSaved: onRefresh,
+  );
+}
 
 class WorkoutScreen extends StatefulWidget {
   final bool connected;
@@ -431,157 +441,101 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
+  void _showImportProgramSheet() {
+    // Import via the shared import widget — routines land in local storage
+    // and refresh the tab via _routineRefreshTick.
+    _doShowImportSheet(context, onRefresh: () {
+      setState(() => _routineRefreshTick++);
+    });
+  }
+
   List<String> _detectMuscleGroups(List<_ExerciseEntry> exercises) =>
       detectMuscleGroupsFromNames(exercises.map((e) => e.name).toList());
-
-  void _showWorkoutSummary({
-    required int elapsed,
-    required String workoutName,
-    required List<Map<String, dynamic>> savedExercises,
-    required List<String> muscleGroups,
-  }) {
-    final duration = Duration(seconds: elapsed);
-    final durationLabel =
-        '${duration.inMinutes}m ${(duration.inSeconds % 60)}s';
-    final totalSets =
-        savedExercises.fold<int>(0, (s, e) => s + ((e['sets'] ?? 0) as num).toInt());
-    final totalVolume = savedExercises.fold<double>(
-        0,
-        (vol, e) =>
-            vol +
-            ((e['weight'] ?? 0) as num).toDouble() *
-                ((e['sets'] ?? 1) as num).toDouble() *
-                ((e['reps'] ?? 1) as num).toDouble());
-    final volLabel = totalVolume >= 1000
-        ? '${(totalVolume / 1000).toStringAsFixed(1)}k lbs'
-        : '${totalVolume.toInt()} lbs';
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: IronMindTheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                const Icon(Icons.check_circle_outline,
-                    color: IronMindTheme.green, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    workoutName.isEmpty ? 'WORKOUT COMPLETE' : workoutName.toUpperCase(),
-                    style: GoogleFonts.bebasNeue(
-                        color: IronMindTheme.textPrimary,
-                        fontSize: 22,
-                        letterSpacing: 1.5),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 20),
-              Row(children: [
-                _SummaryStatChip(label: 'Duration', value: durationLabel),
-                const SizedBox(width: 10),
-                _SummaryStatChip(
-                    label: 'Exercises', value: '${savedExercises.length}'),
-                const SizedBox(width: 10),
-                _SummaryStatChip(label: 'Sets', value: '$totalSets'),
-              ]),
-              const SizedBox(height: 10),
-              _SummaryStatChip(label: 'Total Volume', value: volLabel, wide: true),
-              if (muscleGroups.isNotEmpty) ...[
-                const SizedBox(height: 20),
-                Text('MUSCLES WORKED',
-                    style: GoogleFonts.dmMono(
-                        color: IronMindTheme.text3,
-                        fontSize: 9,
-                        letterSpacing: 1.5)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: muscleGroups
-                      .map((g) => IronBadge(g, color: IronMindTheme.accent))
-                      .toList(),
-                ),
-              ],
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text('DONE',
-                      style: GoogleFonts.bebasNeue(
-                          fontSize: 18, letterSpacing: 1.5)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   void _finishWorkout() async {
     _timer?.cancel();
     _stopRest();
+
+    final now = DateTime.now();
     final summaryExercises = _exercises.where((e) => e.name.isNotEmpty).toList();
-    final capturedElapsed = _elapsed;
-    final capturedName = _workoutName;
-    final muscleGroups = _detectMuscleGroups(summaryExercises);
+    final capturedElapsed  = _elapsed;
+    final capturedName     = _workoutName;
+    final muscleGroups     = _detectMuscleGroups(summaryExercises);
 
-    final data = summaryExercises
-        .map((e) => {
-              'name': e.name,
-              'sets': e.sets.length,
-              'reps': e.sets.isNotEmpty ? e.sets.last.reps : 0,
-              'weight': e.sets.isNotEmpty ? e.sets.last.weight : 0,
-            })
-        .toList();
+    // Capture full set-by-set data before clearing state
+    final summaryExerciseList = summaryExercises.map((e) {
+      final completedSets = e.sets
+          .where((s) => s.done && s.reps > 0)
+          .map((s) => SummarySet(
+            weight: s.weight,
+            reps:   s.reps,
+            isPR:   s.prTracked,
+          ))
+          .toList();
+      return SummaryExercise(name: e.name, completedSets: completedSets);
+    }).where((e) => e.completedSets.isNotEmpty).toList();
 
-    if (data.isNotEmpty) {
+    final summaryData = WorkoutSummaryData(
+      name:           capturedName,
+      date:           now,
+      elapsedSeconds: capturedElapsed,
+      muscleGroups:   muscleGroups,
+      exercises:      summaryExerciseList,
+      muscleSetMap:   computeMuscleSetMap(summaryExerciseList),
+    );
+
+    // Simplified log data for storage (last completed set per exercise)
+    final logData = summaryExercises.map((e) {
+      final done = e.sets.where((s) => s.done && s.reps > 0).toList();
+      return {
+        'name':   e.name,
+        'sets':   done.length,
+        'reps':   done.isNotEmpty ? done.last.reps   : 0,
+        'weight': done.isNotEmpty ? done.last.weight : 0,
+      };
+    }).where((d) => (d['sets'] as int) > 0).toList();
+
+    if (logData.isNotEmpty) {
       try {
         await ApiService.saveLog({
-          'date': DateTime.now().toIso8601String().split('T')[0],
-          'program_name': _workoutName,
-          'day_name': _workoutName.isEmpty ? 'Workout' : _workoutName,
-          'focus': muscleGroups.join(', '),
-          'exercises': data,
-          'notes': _sessionPlan,
+          'date':         now.toIso8601String().split('T')[0],
+          'program_name': capturedName,
+          'day_name':     capturedName.isEmpty ? 'Workout' : capturedName,
+          'focus':        muscleGroups.join(', '),
+          'exercises':    logData,
+          'notes':        _sessionPlan,
         });
         await HealthService.instance.writeWorkout({
-          'exercises': data,
-          'elapsed': capturedElapsed,
+          'exercises': logData,
+          'elapsed':   capturedElapsed,
         });
       } catch (_) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Server offline — workout not saved'),
               backgroundColor: IronMindTheme.orange,
             ),
           );
+        }
       }
     }
 
     setState(() {
       _workoutActive = false;
-      _elapsed = 0;
+      _elapsed       = 0;
       _exercises.clear();
-      _workoutName = '';
-      _sessionPlan = '';
+      _workoutName   = '';
+      _sessionPlan   = '';
     });
 
-    if (mounted && data.isNotEmpty) {
-      _showWorkoutSummary(
-        elapsed: capturedElapsed,
-        workoutName: capturedName,
-        savedExercises: data,
-        muscleGroups: muscleGroups,
+    if (mounted && summaryData.exercises.isNotEmpty) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WorkoutSummaryScreen(data: summaryData),
+          fullscreenDialog: true,
+        ),
       );
     }
   }
@@ -671,8 +625,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             _WorkoutHomeTab(
               key: ValueKey('workout-log-$_routineRefreshTick'),
               onStartEmptyWorkout: _startEmptyWorkout,
-              onCreateRoutine: _showCreateRoutineSheet,
-              onStartRoutine: _startRoutine,
+              onCreateRoutine:  _showCreateRoutineSheet,
+              onImportProgram:  _showImportProgramSheet,
+              onStartRoutine:   _startRoutine,
               onOpenAiGenerator: _showAiWorkoutPrompt,
             ),
           if (_resting)
@@ -1586,6 +1541,7 @@ class _ExerciseCardState extends State<_ExerciseCard> {
 class _WorkoutHomeTab extends StatefulWidget {
   final VoidCallback onStartEmptyWorkout;
   final VoidCallback onCreateRoutine;
+  final VoidCallback onImportProgram;
   final ValueChanged<Map<String, dynamic>> onStartRoutine;
   final VoidCallback onOpenAiGenerator;
 
@@ -1593,6 +1549,7 @@ class _WorkoutHomeTab extends StatefulWidget {
     super.key,
     required this.onStartEmptyWorkout,
     required this.onCreateRoutine,
+    required this.onImportProgram,
     required this.onStartRoutine,
     required this.onOpenAiGenerator,
   });
@@ -1634,52 +1591,100 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
       backgroundColor: IronMindTheme.surface2,
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
         children: [
 
-          // ── Quick start row ──────────────────────────────────────────────
-          Row(children: [
-            Expanded(
-              child: _QuickStartButton(
-                label: 'START EMPTY WORKOUT',
-                icon: Icons.add,
-                onTap: widget.onStartEmptyWorkout,
+          // ── Start button ─────────────────────────────────────────────────
+          GestureDetector(
+            onTap: widget.onStartEmptyWorkout,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    IronMindTheme.accent,
+                    const Color(0xFF2D8FD4),
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: IronMindTheme.accent.withOpacity(0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Transform.rotate(
+                    angle: -0.78,
+                    child: const Icon(Icons.fitness_center,
+                      color: Colors.black, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('START WORKOUT',
+                    style: GoogleFonts.bebasNeue(
+                      color: Colors.black,
+                      fontSize: 20,
+                      letterSpacing: 2,
+                    )),
+                ],
               ),
             ),
-            const SizedBox(width: 10),
+          ),
+          const SizedBox(height: 10),
+
+          // ── Secondary actions ────────────────────────────────────────────
+          Row(children: [
             Expanded(
               child: _QuickStartButton(
                 label: 'NEW ROUTINE',
                 icon: Icons.edit_outlined,
                 onTap: widget.onCreateRoutine,
-                accent: true,
               ),
             ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _QuickStartButton(
+                label: 'EXERCISES',
+                icon: Icons.search,
+                onTap: () => _showExploreSheet(context, onAdded: _load),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _QuickStartButton(
+              label: 'IMPORT',
+              icon: Icons.upload_file_outlined,
+              onTap: widget.onImportProgram,
+              compact: true,
+            ),
           ]),
-          const SizedBox(height: 10),
-
-          // ── Explore banner ───────────────────────────────────────────────
-          _ExploreBanner(
-            onTap: () => _showExploreSheet(context, onAdded: _load),
-          ),
-          const SizedBox(height: 22),
-
           // ── Routines ─────────────────────────────────────────────────────
           SectionHeader(
             title: 'My Routines',
-            trailing: _routines.isNotEmpty
-                ? GestureDetector(
-                    onTap: widget.onCreateRoutine,
-                    child: Text(
-                      '+ NEW',
-                      style: GoogleFonts.dmMono(
-                        color: IronMindTheme.accent,
-                        fontSize: 10,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  )
-                : null,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: widget.onImportProgram,
+                  child: Text('IMPORT',
+                    style: GoogleFonts.dmMono(
+                      color: IronMindTheme.blue, fontSize: 10, letterSpacing: 1)),
+                ),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  onTap: widget.onCreateRoutine,
+                  child: Text('+ NEW',
+                    style: GoogleFonts.dmMono(
+                      color: IronMindTheme.accent, fontSize: 10, letterSpacing: 1)),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           if (_routines.isEmpty)
@@ -1687,9 +1692,30 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
           else
             ..._routines.map((r) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: _RoutineCard(
-                routine: r,
-                onStart: () => widget.onStartRoutine(r),
+              child: Dismissible(
+                key: ValueKey(r['id'] ?? r['name']),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                  ),
+                  child: const Icon(Icons.delete_outline,
+                    color: Colors.redAccent, size: 22),
+                ),
+                confirmDismiss: (_) async {
+                  final id = r['id']?.toString() ?? '';
+                  if (id.isNotEmpty) await ApiService.deleteRoutine(id);
+                  await _load();
+                  return false; // _load rebuilds list, no need for Dismissible to remove
+                },
+                child: _RoutineCard(
+                  routine: r,
+                  onStart: () => widget.onStartRoutine(r),
+                ),
               ),
             )),
 
@@ -1704,41 +1730,48 @@ class _QuickStartButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final bool accent;
+  final bool compact;
 
   const _QuickStartButton({
     required this.label,
     required this.icon,
     required this.onTap,
-    this.accent = false,
+    this.accent  = false,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = accent ? IronMindTheme.accent : IronMindTheme.textPrimary;
-    final bg = accent ? IronMindTheme.accentDim : IronMindTheme.surface;
+    final color  = accent  ? IronMindTheme.accent : IronMindTheme.textPrimary;
+    final bg     = accent  ? IronMindTheme.accentDim : IronMindTheme.surface;
     final border = accent
         ? IronMindTheme.accent.withValues(alpha: 0.35)
         : IronMindTheme.border2;
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: compact
+            ? const EdgeInsets.symmetric(vertical: 12, horizontal: 14)
+            : const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: border),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 14),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: GoogleFonts.bebasNeue(color: color, fontSize: 13, letterSpacing: 1.2),
-            ),
-          ],
-        ),
+        child: compact
+            ? Icon(icon, color: IronMindTheme.blue, size: 16)
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: color, size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: GoogleFonts.bebasNeue(
+                      color: color, fontSize: 13, letterSpacing: 1.2),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -1931,9 +1964,30 @@ class _LogHistoryTabState extends State<_LogHistoryTab> {
             ..._routines.map(
               (routine) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _RoutineCard(
-                  routine: routine,
-                  onStart: () => widget.onStartRoutine(routine),
+                child: Dismissible(
+                  key: ValueKey('2_${routine['id'] ?? routine['name']}'),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                    ),
+                    child: const Icon(Icons.delete_outline,
+                      color: Colors.redAccent, size: 22),
+                  ),
+                  confirmDismiss: (_) async {
+                    final id = routine['id']?.toString() ?? '';
+                    if (id.isNotEmpty) await ApiService.deleteRoutine(id);
+                    _load();
+                    return false;
+                  },
+                  child: _RoutineCard(
+                    routine: routine,
+                    onStart: () => widget.onStartRoutine(routine),
+                  ),
                 ),
               ),
             ),
@@ -3589,8 +3643,9 @@ Future<void> _showRoutineBuilderSheet(
 class _RoutineCard extends StatelessWidget {
   final Map<String, dynamic> routine;
   final VoidCallback onStart;
+  final VoidCallback? onDelete;
 
-  const _RoutineCard({required this.routine, required this.onStart});
+  const _RoutineCard({required this.routine, required this.onStart, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -4156,39 +4211,6 @@ class _ExploreRoutineCard extends StatelessWidget {
         ],
       ]),
     );
-  }
-}
-
-class _SummaryStatChip extends StatelessWidget {
-  final String label, value;
-  final bool wide;
-  const _SummaryStatChip({required this.label, required this.value, this.wide = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: IronMindTheme.surface2,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: IronMindTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label.toUpperCase(),
-              style: GoogleFonts.dmMono(
-                  color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1)),
-          const SizedBox(height: 3),
-          Text(value,
-              style: GoogleFonts.bebasNeue(
-                  color: IronMindTheme.textPrimary,
-                  fontSize: 20,
-                  letterSpacing: 1)),
-        ],
-      ),
-    );
-    return wide ? SizedBox(width: double.infinity, child: content) : Expanded(child: content);
   }
 }
 

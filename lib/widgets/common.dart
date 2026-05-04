@@ -58,11 +58,18 @@ class IronCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
-    padding: padding ?? const EdgeInsets.all(14),
+    padding: padding ?? const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: IronMindTheme.surface,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(14),
       border: Border.all(color: IronMindTheme.border),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.18),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
     ),
     child: child,
   );
@@ -104,8 +111,16 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    crossAxisAlignment: CrossAxisAlignment.center,
     children: [
-      Text(title, style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 16, letterSpacing: 2)),
+      Text(
+        title.toUpperCase(),
+        style: GoogleFonts.bebasNeue(
+          color: IronMindTheme.textPrimary,
+          fontSize: 20,
+          letterSpacing: 2.5,
+        ),
+      ),
       if (trailing != null) trailing!,
     ],
   );

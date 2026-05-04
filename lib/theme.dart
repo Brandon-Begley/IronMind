@@ -55,46 +55,31 @@ ThemeData buildIronMindTheme() {
     ),
     textTheme: TextTheme(
       displayLarge: GoogleFonts.bebasNeue(
-        color: IronMindColors.textPrimary,
-        fontSize: 48,
-        letterSpacing: 2,
-      ),
+        color: IronMindColors.textPrimary, fontSize: 52, letterSpacing: 2),
       displayMedium: GoogleFonts.bebasNeue(
-        color: IronMindColors.textPrimary,
-        fontSize: 32,
-        letterSpacing: 1.5,
-      ),
+        color: IronMindColors.textPrimary, fontSize: 36, letterSpacing: 1.5),
       displaySmall: GoogleFonts.bebasNeue(
-        color: IronMindColors.textPrimary,
-        fontSize: 24,
-        letterSpacing: 1,
-      ),
+        color: IronMindColors.textPrimary, fontSize: 26, letterSpacing: 1),
       bodyLarge: GoogleFonts.dmSans(
-        color: IronMindColors.textPrimary,
-        fontSize: 16,
-      ),
+        color: IronMindColors.textPrimary, fontSize: 16),
       bodyMedium: GoogleFonts.dmSans(
-        color: IronMindColors.textSecondary,
-        fontSize: 14,
-      ),
+        color: IronMindColors.textSecondary, fontSize: 14),
       bodySmall: GoogleFonts.dmMono(
-        color: IronMindColors.textSecondary,
-        fontSize: 12,
-      ),
+        color: IronMindColors.textSecondary, fontSize: 12),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: IronMindColors.surfaceElevated,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: IronMindColors.border),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: IronMindColors.border),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(color: IronMindColors.accent, width: 1.5),
       ),
       labelStyle: GoogleFonts.dmSans(color: IronMindColors.textSecondary),
@@ -103,11 +88,26 @@ ThemeData buildIronMindTheme() {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: IronMindColors.accent,
-        foregroundColor: IronMindColors.background,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        foregroundColor: Colors.black,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-        textStyle: GoogleFonts.bebasNeue(fontSize: 18, letterSpacing: 1.5),
+        elevation: 0,
+        textStyle: GoogleFonts.bebasNeue(fontSize: 20, letterSpacing: 1.8),
       ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: IronMindColors.textPrimary,
+        side: const BorderSide(color: IronMindColors.border),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+        textStyle: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+    ),
+    dividerTheme: const DividerThemeData(
+      color: IronMindColors.border,
+      thickness: 1,
+      space: 1,
     ),
   );
 }

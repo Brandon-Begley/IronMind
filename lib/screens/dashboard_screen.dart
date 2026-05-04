@@ -5,6 +5,8 @@ import '../services/api_service.dart';
 import '../services/health_service.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/powerlifting_total_card.dart';
+import 'pr_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final bool connected;
@@ -30,13 +32,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Consistency X/7 counts
   int _workoutCount = 0;
-  int _foodLogCount = 0;
   int _checkInCount = 0;
   int _habitCount = 0;
 
   // Today status
   bool _todayWorkout = false;
-  bool _todayFood = false;
   bool _todayCheckIn = false;
 
   // Health data
@@ -63,7 +63,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ApiService.getStrengthGoals(),
         ApiService.getBodyweightLogs(),
         ApiService.getCheckInLoggedDates(),
-        ApiService.getNutritionLoggedDates(lookbackDays: 7),
         ApiService.getHabits(),
         ApiService.getWorkoutLoggedDates(),
       ]);
@@ -74,13 +73,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _profile        = results[3] as Map<String, dynamic>;
       _goals          = results[4] as Map<String, dynamic>;
       _bodyweightLogs = results[5] as List<Map<String, dynamic>>;
-      final checkInDates   = results[6] as Set<String>;
-      final nutritionDates = results[7] as Set<String>;
-      final habits         = results[8] as List<Map<String, dynamic>>;
-      final workoutDates   = results[9] as Set<String>;
+      final checkInDates = results[6] as Set<String>;
+      final habits       = results[7] as List<Map<String, dynamic>>;
+      final workoutDates = results[8] as Set<String>;
 
       _calcMetrics();
-      await _calcConsistency(checkInDates, nutritionDates, habits, workoutDates);
+      await _calcConsistency(checkInDates, habits, workoutDates);
     } catch (_) {}
     setState(() => _loading = false);
 
@@ -111,7 +109,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _calcConsistency(
     Set<String> checkInDates,
-    Set<String> nutritionDates,
     List<Map<String, dynamic>> habits,
     Set<String> workoutDates,
   ) async {
@@ -121,9 +118,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final week7 = List.generate(7, (i) => _dateStr(weekStart.add(Duration(days: i))));
 
     // X/7 counts
-    _workoutCount  = week7.where((d) => workoutDates.contains(d)).length;
-    _foodLogCount  = week7.where((d) => nutritionDates.contains(d)).length;
-    _checkInCount  = week7.where((d) => checkInDates.contains(d)).length;
+    _workoutCount = week7.where((d) => workoutDates.contains(d)).length;
+    _checkInCount = week7.where((d) => checkInDates.contains(d)).length;
 
     final allHabitDays = <String>{};
     for (final h in habits) {
@@ -133,9 +129,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _habitCount = week7.where((d) => allHabitDays.contains(d)).length;
 
     // Today status
-    _todayWorkout  = workoutDates.contains(todayStr);
-    _todayFood     = nutritionDates.contains(todayStr);
-    _todayCheckIn  = checkInDates.contains(todayStr);
+    _todayWorkout = workoutDates.contains(todayStr);
+    _todayCheckIn = checkInDates.contains(todayStr);
 
     // Current workout streak (consecutive days ending today or yesterday)
     int streak = 0;
@@ -254,43 +249,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     // ── 1. Date header ─────────────────────────────────────
                     _DateHeader(),
-                    const SizedBox(height: 20),
-
-                    // ── 2. Today ───────────────────────────────────────────
-                    const SectionHeader(title: 'Today'),
-                    const SizedBox(height: 10),
-                    _TodayCard(
-                      workout:  _todayWorkout,
-                      food:     _todayFood,
-                      checkIn:  _todayCheckIn,
-                      mood:     _wellness?['mood'],
-                    ),
                     if (HealthService.instance.isConnected &&
                         (_healthSteps != null || _healthActiveCalories != null)) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       _HealthSummaryRow(
                         steps: _healthSteps,
                         activeCalories: _healthActiveCalories,
                       ),
                     ],
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 20),
 
-                    // ── 3. This Week ───────────────────────────────────────
+                    // ── 2. This Week ───────────────────────────────────────
                     const SectionHeader(title: 'This Week'),
                     const SizedBox(height: 10),
                     _ThisWeekCard(
-                      sessions:      _weekSessions,
-                      volume:        _weekVolume,
-                      streak:        _currentStreak,
-                      formatVol:     _formatVol,
-                      workoutCount:  _workoutCount,
-                      foodLogCount:  _foodLogCount,
-                      checkInCount:  _checkInCount,
-                      habitCount:    _habitCount,
+                      sessions:     _weekSessions,
+                      volume:       _weekVolume,
+                      streak:       _currentStreak,
+                      formatVol:    _formatVol,
+                      workoutCount: _workoutCount,
+                      checkInCount: _checkInCount,
+                      habitCount:   _habitCount,
                     ),
                     const SizedBox(height: 18),
 
-                    // ── 4. Strength Progress ───────────────────────────────
+                    // ── 4. Powerlifting Total ──────────────────────────────
+                    PowerliftingTotalCompact(
+                      squat:    _currentLift('squat',    'currentSquat'),
+                      bench:    _currentLift('bench',    'currentBench'),
+                      deadlift: _currentLift('deadlift', 'currentDeadlift'),
+                      onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const PRScreen())),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // ── 5. Strength Progress ───────────────────────────────
                     const SectionHeader(title: 'Strength Progress'),
                     const SizedBox(height: 10),
                     IronCard(
@@ -306,55 +299,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 18),
 
-                    // ── 5. Bodyweight ──────────────────────────────────────
-                    const SectionHeader(title: 'Bodyweight'),
-                    const SizedBox(height: 10),
-                    IronCard(
-                      child: Column(children: [
-                        _StrengthProgressRow(
-                          label: 'Bodyweight',
-                          current: _currentBodyweight(),
-                          goal: _goalBodyweight(),
-                          color: IronMindTheme.accent,
-                          progressOverride: _bodyweightProgress(),
-                        ),
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            _weightGoalLabel(),
-                            style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 11),
-                          ),
-                        ),
-                      ]),
-                    ),
-                    const SizedBox(height: 18),
-
                     // ── 6. Top Records ─────────────────────────────────────
                     if (_prs.isNotEmpty) ...[
-                      const SectionHeader(title: 'Top Records'),
+                      SectionHeader(
+                        title: 'Top Records',
+                        trailing: GestureDetector(
+                          onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const PRScreen())),
+                          child: Text('VIEW ALL',
+                            style: GoogleFonts.dmMono(
+                              color: IronMindTheme.accent,
+                              fontSize: 10, letterSpacing: 1)),
+                        ),
+                      ),
                       const SizedBox(height: 10),
                       IronCard(
                         padding: EdgeInsets.zero,
                         child: Column(
                           children: _prs.take(4).toList().asMap().entries.map((entry) {
-                            final pr = entry.value;
+                            final pr     = entry.value;
                             final isLast = entry.key == (_prs.take(4).length - 1);
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                              decoration: BoxDecoration(
-                                border: isLast ? null : const Border(bottom: BorderSide(color: IronMindTheme.border)),
-                              ),
-                              child: Row(children: [
-                                Expanded(
-                                  child: Text(pr['exercise'] ?? '',
-                                    style: GoogleFonts.dmSans(color: IronMindTheme.textPrimary, fontWeight: FontWeight.w500, fontSize: 13)),
+                            return GestureDetector(
+                              onTap: () => Navigator.push(context,
+                                MaterialPageRoute(builder: (_) => const PRScreen())),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                                decoration: BoxDecoration(
+                                  border: isLast ? null : const Border(
+                                    bottom: BorderSide(color: IronMindTheme.border)),
                                 ),
-                                IronBadge('${pr['weight']}lb x ${pr['reps']}', color: IronMindTheme.accent),
-                                const SizedBox(width: 6),
-                                if (pr['estimated_1rm'] != null)
-                                  IronBadge('~${pr['estimated_1rm']}lb', color: IronMindTheme.green),
-                              ]),
+                                child: Row(children: [
+                                  Expanded(
+                                    child: Text(pr['exercise'] ?? '',
+                                      style: GoogleFonts.dmSans(
+                                        color: IronMindTheme.textPrimary,
+                                        fontWeight: FontWeight.w500, fontSize: 13)),
+                                  ),
+                                  IronBadge('${pr['weight']}lb x ${pr['reps']}',
+                                    color: IronMindTheme.accent),
+                                  const SizedBox(width: 6),
+                                  if (pr['estimated_1rm'] != null)
+                                    IronBadge('~${pr['estimated_1rm']}lb',
+                                      color: IronMindTheme.green),
+                                  const SizedBox(width: 6),
+                                  const Icon(Icons.chevron_right,
+                                    size: 14, color: IronMindTheme.text3),
+                                ]),
+                              ),
                             );
                           }).toList(),
                         ),
@@ -404,13 +395,11 @@ class _DateHeader extends StatelessWidget {
 // ── Today Card ────────────────────────────────────────────────────────────────
 class _TodayCard extends StatelessWidget {
   final bool workout;
-  final bool food;
   final bool checkIn;
   final dynamic mood;
 
   const _TodayCard({
     required this.workout,
-    required this.food,
     required this.checkIn,
     required this.mood,
   });
@@ -425,11 +414,9 @@ class _TodayCard extends StatelessWidget {
         border: Border.all(color: IronMindTheme.border),
       ),
       child: Row(children: [
-        Expanded(child: _TodayChip(label: 'Workout',  done: workout,  color: IronMindTheme.accent)),
+        Expanded(child: _TodayChip(label: 'Workout',  done: workout, color: IronMindTheme.accent)),
         const SizedBox(width: 8),
-        Expanded(child: _TodayChip(label: 'Food Log', done: food,     color: IronMindTheme.green)),
-        const SizedBox(width: 8),
-        Expanded(child: _TodayChip(label: 'Check-In', done: checkIn,  color: const Color(0xFF9B8AFB))),
+        Expanded(child: _TodayChip(label: 'Check-In', done: checkIn, color: const Color(0xFF9B8AFB))),
         if (mood != null) ...[
           const SizedBox(width: 8),
           Expanded(child: _TodayChip(label: 'Mood $mood/10', done: true, color: IronMindTheme.blue)),
@@ -487,7 +474,6 @@ class _ThisWeekCard extends StatelessWidget {
   final int streak;
   final String Function(double) formatVol;
   final int workoutCount;
-  final int foodLogCount;
   final int checkInCount;
   final int habitCount;
 
@@ -497,7 +483,6 @@ class _ThisWeekCard extends StatelessWidget {
     required this.streak,
     required this.formatVol,
     required this.workoutCount,
-    required this.foodLogCount,
     required this.checkInCount,
     required this.habitCount,
   });
@@ -529,8 +514,6 @@ class _ThisWeekCard extends StatelessWidget {
         Text('CONSISTENCY', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1.5)),
         const SizedBox(height: 10),
         _ConsistencyRow(label: 'Workouts',  count: workoutCount, color: IronMindTheme.accent),
-        const SizedBox(height: 8),
-        _ConsistencyRow(label: 'Food Log',  count: foodLogCount, color: IronMindTheme.green),
         const SizedBox(height: 8),
         _ConsistencyRow(label: 'Check-Ins', count: checkInCount, color: const Color(0xFF9B8AFB)),
         const SizedBox(height: 8),

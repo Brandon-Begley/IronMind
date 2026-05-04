@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 
 import 'auth_service.dart';
 import 'local_store.dart';
-import 'usda_food_service.dart';
 
 class ApiService {
   static const String _logsKey = 'workout_logs';
@@ -193,6 +192,12 @@ class ApiService {
     return prs[exercise.toLowerCase()] is Map
         ? Map<String, dynamic>.from(prs[exercise.toLowerCase()] as Map)
         : null;
+  }
+
+  static Future<void> deletePR(String exercise) async {
+    final prs = await getPRs();
+    prs.remove(exercise.toLowerCase());
+    await localStore.setString(await _scopedKey(_prsKey), jsonEncode(prs));
   }
 
   static double _prScore(Map<String, dynamic>? pr) {
@@ -450,24 +455,7 @@ class ApiService {
   }
 
   static Future<List<Map<String, dynamic>>> searchFood(String query) async {
-    if (query.trim().isEmpty) return [];
-    try {
-      final foods = await UsdaFoodService.searchFoods(query, pageSize: 12);
-      return foods.map((food) {
-        final formatted = UsdaFoodService.formatFoodResult(food);
-        return {
-          'name': formatted['name'] ?? '',
-          'brand': food['brandOwner'] ?? '',
-          'serving': '100g',
-          'calories': (formatted['calories'] as num?)?.toInt() ?? 0,
-          'protein': (formatted['protein'] as num?)?.toDouble() ?? 0.0,
-          'carbs': (formatted['carbs'] as num?)?.toDouble() ?? 0.0,
-          'fat': (formatted['fats'] as num?)?.toDouble() ?? 0.0,
-        };
-      }).toList();
-    } catch (_) {
-      return [];
-    }
+    return [];
   }
 
   static Future<void> generateMealPlan({

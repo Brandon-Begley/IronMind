@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,35 +14,33 @@ import '../widgets/common.dart';
 class ProfileScreen extends StatefulWidget {
   final Future<void> Function() onSignOut;
   final Future<void> Function() onRedoOnboarding;
-  final void Function(bool tracking)? onNutritionTrackingChanged;
 
   const ProfileScreen({
     super.key,
     required this.onSignOut,
     required this.onRedoOnboarding,
-    this.onNutritionTrackingChanged,
   });
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic> _profile = {};
-  Map<String, dynamic> _goals = {};
+  Map<String, dynamic> _goals   = {};
   List<Map<String, dynamic>> _logs = [];
-  int _bestStreakDays = 0;
-  int _totalWorkouts = 0;
-  bool _loading = true;
+  int  _bestStreakDays = 0;
+  int  _totalWorkouts  = 0;
+  int  _totalPRs       = 0;
+  bool _loading        = true;
   bool _healthConnected = false;
   String? _avatarPath;
+
+  double get _totalVolume => _logs.fold(0.0, (s, log) => s + _logVolume(log));
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _load();
   }
 
@@ -53,14 +51,15 @@ class _ProfileScreenState extends State<ProfileScreen>
       ApiService.getLogs(),
       ApiService.getWorkoutLoggedDates(),
       ApiService.getHabits(),
+      ApiService.getPRList(),
     ]);
-    final profile = results[0] as Map<String, dynamic>;
-    final goals = results[1] as Map<String, dynamic>;
-    final logs = results[2] as List<Map<String, dynamic>>;
+    final profile      = results[0] as Map<String, dynamic>;
+    final goals        = results[1] as Map<String, dynamic>;
+    final logs         = results[2] as List<Map<String, dynamic>>;
     final workoutDates = results[3] as Set<String>;
-    final habits = results[4] as List<Map<String, dynamic>>;
+    final habits       = results[4] as List<Map<String, dynamic>>;
+    final prs          = results[5] as List<Map<String, dynamic>>;
 
-    // Best streak across workouts + all custom habits
     int bestStreak = ApiService.computeStreak(workoutDates)['longest'] ?? 0;
     for (final h in habits) {
       final dates = await ApiService.getHabitCompletedDates(h['id'] as String);
@@ -68,7 +67,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (s > bestStreak) bestStreak = s;
     }
 
-    // Resolve avatar path outside setState (needs async file check)
     String? resolvedAvatar;
     final rawAvatar = profile['avatarPath']?.toString();
     if (rawAvatar != null && rawAvatar.isNotEmpty) {
@@ -77,21 +75,16 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     if (!mounted) return;
     setState(() {
-      _profile = profile;
-      _goals = goals;
-      _logs = logs;
+      _profile       = profile;
+      _goals         = goals;
+      _logs          = logs;
       _bestStreakDays = bestStreak;
-      _totalWorkouts = logs.length;
+      _totalWorkouts  = logs.length;
+      _totalPRs       = prs.length;
       _healthConnected = HealthService.instance.isConnected;
-      _avatarPath = resolvedAvatar;
-      _loading = false;
+      _avatarPath    = resolvedAvatar;
+      _loading       = false;
     });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   @override
@@ -99,61 +92,54 @@ class _ProfileScreenState extends State<ProfileScreen>
     return Scaffold(
       backgroundColor: IronMindColors.background,
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildTabBar(),
-            Expanded(
-              child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: IronMindColors.accent,
-                      ),
-                    )
-                  : TabBarView(
-                      controller: _tabController,
-                      children: [_buildInfoTab(), _buildBadgesTab(), _buildSettingsTab()],
-                    ),
-            ),
-          ],
-        ),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator(color: IronMindColors.accent))
+            : RefreshIndicator(
+                color: IronMindColors.accent,
+                backgroundColor: IronMindColors.surfaceElevated,
+                onRefresh: _load,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                  children: [
+                    _buildTopBar(),
+                    const SizedBox(height: 24),
+                    _buildHero(),
+                    const SizedBox(height: 20),
+                    _buildStatsStrip(),
+                    const SizedBox(height: 28),
+                    _buildActivity(),
+                    const SizedBox(height: 28),
+                    _buildAchievements(),
+                  ],
+                ),
+              ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  // ── Top bar ────────────────────────────────────────────────────────────────
+
+  Widget _buildTopBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      padding: const EdgeInsets.only(top: 16),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: 'IRON',
-                  style: GoogleFonts.bebasNeue(
-                    color: IronMindColors.accent,
-                    fontSize: 20,
-                    letterSpacing: 2,
-                  ),
-                ),
-                TextSpan(
-                  text: 'MIND',
-                  style: GoogleFonts.bebasNeue(
-                    color: IronMindColors.textPrimary,
-                    fontSize: 20,
-                    letterSpacing: 2,
-                  ),
-                ),
-                TextSpan(
-                  text: '  PROFILE',
-                  style: GoogleFonts.bebasNeue(
-                    color: IronMindColors.textSecondary,
-                    fontSize: 16,
-                    letterSpacing: 2,
-                  ),
-                ),
-              ],
+          Text('Profile',
+            style: GoogleFonts.bebasNeue(
+              color: IronMindColors.textPrimary,
+              fontSize: 28, letterSpacing: 2)),
+          GestureDetector(
+            onTap: _showSettingsSheet,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: IronMindColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: IronMindColors.border),
+              ),
+              child: const Icon(Icons.settings_outlined,
+                color: IronMindColors.textSecondary, size: 20),
             ),
           ),
         ],
@@ -161,193 +147,284 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildTabBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: IronMindColors.surfaceElevated,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: IronMindColors.border),
-        ),
-        child: TabBar(
-          controller: _tabController,
-          indicator: BoxDecoration(
-            color: IronMindColors.accent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          indicatorSize: TabBarIndicatorSize.tab,
-          labelStyle: GoogleFonts.bebasNeue(fontSize: 14, letterSpacing: 1.5),
-          labelColor: IronMindColors.background,
-          unselectedLabelColor: IronMindColors.textSecondary,
-          padding: const EdgeInsets.all(4),
-          tabs: const [Tab(text: 'INFO'), Tab(text: 'BADGES'), Tab(text: 'SETTINGS')],
-        ),
-      ),
-    );
-  }
+  // ── Hero ───────────────────────────────────────────────────────────────────
 
-  Widget _buildInfoTab() {
-    final name = (_profile['name'] ?? '—').toString();
-    final goal = _formatGoal(
-      (_profile['goal'] ?? _profile['trainingGoal'] ?? '—').toString(),
-    );
-    final style = _formatStyle((_profile['style'] ?? '—').toString());
-    final bodyweight = _displayWeight(_profile['bodyweight'] ?? _profile['weight']);
-    final targetWeight = _displayWeight(_profile['goalWeight']);
-    final sessionLength = _profile['sessionLength'];
+  Widget _buildHero() {
+    final name  = (_profile['name'] ?? 'Athlete').toString();
+    final goal  = _formatGoal((_profile['goal'] ?? _profile['trainingGoal'] ?? '').toString());
+    final style = _formatStyle((_profile['style'] ?? '').toString());
+    final sub   = [goal, style].where((s) => s.isNotEmpty && s != '—').join(' · ');
 
-    final totalSets = _logs.fold<int>(0, (sum, log) {
-      final exercises = log['exercises'] as List? ?? [];
-      return sum +
-          exercises.fold<int>(0, (exerciseSum, exercise) {
-            return exerciseSum + ((exercise['sets'] ?? 0) as num).toInt();
-          });
-    });
-    final totalExercises = _logs.fold<int>(0, (sum, log) {
-      final exercises = log['exercises'] as List? ?? [];
-      return sum + exercises.length;
-    });
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+    return Row(
       children: [
-        // ── Hero card ─────────────────────────────────────────────────────
-        _HeroCard(
-          name: name,
-          goal: goal,
-          style: style,
-          currentWeight: bodyweight,
-          targetWeight: targetWeight,
-          sessionLength: sessionLength == null
-              ? '—'
-              : '${(sessionLength as num).round()} min',
-          avatarPath: _avatarPath,
-          onEditAvatar: _showPhotoSourceSheet,
-        ),
-        const SizedBox(height: 12),
-        // ── Lifetime stats ────────────────────────────────────────────────
-        IronCard(
-          child: Row(
+        // Avatar
+        GestureDetector(
+          onTap: _showPhotoSourceSheet,
+          child: Stack(
             children: [
-              Expanded(
-                child: _FooterMetric(
-                  label: 'Lifetime Sessions',
-                  value: '${_logs.length}',
-                  sub: _logs.isEmpty ? 'No workouts logged yet' : 'all sessions',
-                  color: IronMindColors.textPrimary,
+              Container(
+                width: 80, height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: IronMindColors.surfaceElevated,
+                  border: Border.all(
+                    color: IronMindColors.accent.withOpacity(0.4), width: 2),
+                ),
+                child: ClipOval(
+                  child: _avatarPath != null
+                      ? Image.file(File(_avatarPath!), fit: BoxFit.cover)
+                      : const Icon(Icons.person,
+                          color: IronMindColors.textMuted, size: 40),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _FooterMetric(
-                  label: 'Total Sets',
-                  value: '$totalSets',
-                  sub: '$totalExercises exercises',
-                  color: IronMindColors.accent,
+              Positioned(
+                right: 0, bottom: 0,
+                child: Container(
+                  width: 24, height: 24,
+                  decoration: BoxDecoration(
+                    color: IronMindColors.accent,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: IronMindColors.background, width: 2),
+                  ),
+                  child: const Icon(Icons.edit,
+                    color: Colors.black, size: 12),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        // ── Current lifts ─────────────────────────────────────────────────
-        _LiftSummaryCard(
-          squat: _liftStr(_profile['squat'] ?? _profile['currentSquat']),
-          bench: _liftStr(_profile['bench'] ?? _profile['currentBench']),
-          deadlift: _liftStr(_profile['deadlift'] ?? _profile['currentDeadlift']),
-          ohp: _liftStr(_profile['ohp'] ?? _profile['currentOhp']),
-        ),
-        const SizedBox(height: 12),
-        // ── Recent Workouts ───────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(
-            'RECENT WORKOUTS',
-            style: GoogleFonts.dmMono(
-              color: IronMindColors.textMuted,
-              fontSize: 10,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ),
-        if (_logs.isEmpty)
-          IronCard(
-            child: const EmptyState(
-              icon: '◎',
-              title: 'No Workouts Yet',
-              sub: 'Start logging in the Workout tab',
-            ),
-          )
-        else
-          ..._logs.take(3).map((log) {
-            final exercises = log['exercises'] as List? ?? [];
-            final totalSets = exercises.fold<int>(0, (s, e) => s + ((e['sets'] ?? 1) as num).toInt());
-            final vol = _logVolume(log);
-            final rawDate = log['date']?.toString() ?? '';
-            final parsedDate = DateTime.tryParse(rawDate);
-            final displayDate = parsedDate != null
-                ? '${_monthAbbr(parsedDate.month)} ${parsedDate.day}'
-                : rawDate;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: IronCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            log['day_name'] ?? 'Workout',
-                            style: GoogleFonts.bebasNeue(
-                              color: IronMindColors.textPrimary,
-                              fontSize: 15,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                        ),
-                        IronBadge(displayDate, color: IronMindColors.textMuted),
-                      ],
-                    ),
-                    if ((log['focus'] ?? '').isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          log['focus'],
-                          style: GoogleFonts.dmMono(
-                            color: IronMindColors.accent,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                    if (exercises.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              exercises.take(3).map((e) => e['name']).join(' · '),
-                              style: GoogleFonts.dmMono(color: IronMindColors.textMuted, fontSize: 10),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '$totalSets sets · ${_formatVolume(vol)} lbs',
-                            style: GoogleFonts.dmMono(color: IronMindColors.textMuted, fontSize: 9),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
+        const SizedBox(width: 16),
+
+        // Name + subtitle + edit
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name,
+                style: GoogleFonts.bebasNeue(
+                  color: IronMindColors.textPrimary,
+                  fontSize: 28, letterSpacing: 1.5, height: 1)),
+              if (sub.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(sub,
+                    style: GoogleFonts.dmSans(
+                      color: IronMindColors.textSecondary, fontSize: 13)),
+                ),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: _editProfile,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: IronMindColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: IronMindColors.border),
+                  ),
+                  child: Text('Edit Profile',
+                    style: GoogleFonts.dmSans(
+                      color: IronMindColors.textSecondary,
+                      fontSize: 11, fontWeight: FontWeight.w600)),
                 ),
               ),
-            );
-          }),
+            ],
+          ),
+        ),
       ],
     );
   }
+
+  // ── Stats strip ────────────────────────────────────────────────────────────
+
+  Widget _buildStatsStrip() {
+    final vol = _totalVolume;
+    final volLabel = vol >= 1000000
+        ? '${(vol / 1000000).toStringAsFixed(1)}M'
+        : vol >= 1000
+            ? '${(vol / 1000).toStringAsFixed(1)}k'
+            : vol.toStringAsFixed(0);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        color: IronMindColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: IronMindColors.border),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            _StatCol(label: 'Sessions', value: '$_totalWorkouts',  color: IronMindColors.accent),
+            _vDivider(),
+            _StatCol(label: 'Best Streak', value: '${_bestStreakDays}d', color: IronMindColors.warning),
+            _vDivider(),
+            _StatCol(label: 'Volume', value: volLabel,             color: IronMindColors.success),
+            _vDivider(),
+            _StatCol(label: 'PRs', value: '$_totalPRs',            color: IronMindColors.textPrimary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _vDivider() => VerticalDivider(
+    color: IronMindColors.border, width: 1, thickness: 1,
+    indent: 6, endIndent: 6);
+
+  // ── Activity feed ──────────────────────────────────────────────────────────
+
+  Widget _buildActivity() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const SectionHeader(title: 'Activity'),
+            if (_logs.length > 5)
+              Text('${_logs.length} total',
+                style: GoogleFonts.dmMono(
+                  color: IronMindColors.textMuted, fontSize: 10, letterSpacing: 1)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_logs.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: IronMindColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: IronMindColors.border),
+            ),
+            child: Center(
+              child: Column(children: [
+                Icon(Icons.fitness_center_outlined,
+                  color: IronMindColors.textMuted, size: 36),
+                const SizedBox(height: 10),
+                Text('No workouts logged yet',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textSecondary, fontSize: 14)),
+                Text('Head to the Workout tab to start',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textMuted, fontSize: 12)),
+              ]),
+            ),
+          )
+        else
+          ..._logs.take(8).map((log) => _ActivityCard(log: log)),
+      ],
+    );
+  }
+
+  // ── Achievements ───────────────────────────────────────────────────────────
+
+  Widget _buildAchievements() {
+    final badges = _computeBadges();
+    if (badges.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(title: 'Achievements'),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8, runSpacing: 8,
+          children: badges.map((b) => _AchievementPill(badge: b)).toList(),
+        ),
+      ],
+    );
+  }
+
+  List<_Badge> _computeBadges() {
+    final badges = <_Badge>[];
+    // Workout count milestones
+    const workoutMilestones = [1, 10, 25, 50, 100, 200, 365, 500];
+    for (final m in workoutMilestones) {
+      if (_totalWorkouts >= m) {
+        badges.add(_Badge(
+          emoji: m >= 365 ? '🔱' : m >= 100 ? '🏆' : m >= 25 ? '⭐' : '🎯',
+          label: '$m Sessions',
+          color: m >= 100 ? const Color(0xFFFFD700) : IronMindColors.accent,
+        ));
+      }
+    }
+    // Streak milestones
+    const streakMilestones = [7, 14, 30, 60, 90, 180, 365];
+    for (final m in streakMilestones) {
+      if (_bestStreakDays >= m) {
+        badges.add(_Badge(
+          emoji: m >= 90 ? '🔥' : '⚡',
+          label: '${m}d Streak',
+          color: IronMindColors.warning,
+        ));
+      }
+    }
+    return badges;
+  }
+
+  // ── Settings sheet ─────────────────────────────────────────────────────────
+
+  void _showSettingsSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        decoration: const BoxDecoration(
+          color: IronMindColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: IronMindColors.border,
+                borderRadius: BorderRadius.circular(2)),
+            ),
+            Text('Settings',
+              style: GoogleFonts.bebasNeue(
+                color: IronMindColors.textPrimary,
+                fontSize: 24, letterSpacing: 1.5)),
+            const SizedBox(height: 16),
+            _SettingsRow(
+              icon: Icons.person_outline,
+              label: 'Edit Profile',
+              onTap: () { Navigator.pop(context); _editProfile(); },
+            ),
+            _SettingsRow(
+              icon: Icons.flag_outlined,
+              label: 'Strength Goals',
+              onTap: () { Navigator.pop(context); _editGoalsSheet(); },
+            ),
+            _HealthConnectRow(
+              connected: _healthConnected,
+              onConnect: _handleHealthConnect,
+              onDisconnect: _handleHealthDisconnect,
+            ),
+            const SizedBox(height: 8),
+            const Divider(color: IronMindColors.border),
+            const SizedBox(height: 8),
+            _SettingsRow(
+              icon: Icons.restart_alt,
+              label: 'Redo Onboarding',
+              onTap: () { Navigator.pop(context); _redoOnboarding(); },
+              color: IronMindColors.warning,
+            ),
+            _SettingsRow(
+              icon: Icons.logout,
+              label: 'Sign Out',
+              onTap: () { Navigator.pop(context); _signOut(); },
+              color: IronMindColors.alert,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   double _logVolume(Map<String, dynamic> log) {
     final exercises = log['exercises'] as List? ?? [];
@@ -362,65 +439,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _monthAbbr(int month) {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return months[(month - 1).clamp(0, 11)];
-  }
-
-  Widget _buildBadgesTab() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-      children: [
-        _BadgesCard(
-          bestStreakDays: _bestStreakDays,
-          totalWorkouts: _totalWorkouts,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSettingsTab() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-      children: [
-        _SettingsRow(
-          icon: Icons.person_outline,
-          label: 'Edit Profile',
-          onTap: _editProfile,
-        ),
-        _SettingsRow(
-          icon: Icons.flag_outlined,
-          label: 'Edit Strength Goals',
-          onTap: _editGoalsSheet,
-        ),
-        _SettingsRow(
-          icon: Icons.favorite_outline,
-          label: 'Body Metrics Live In Wellness',
-          onTap: _goToWellnessMessage,
-        ),
-        _HealthConnectRow(
-          connected: _healthConnected,
-          onConnect: _handleHealthConnect,
-          onDisconnect: _handleHealthDisconnect,
-        ),
-        _NutritionTrackingRow(
-          tracking: _profile['trackingNutrition'] != false,
-          onToggle: _toggleNutritionTracking,
-        ),
-        const SizedBox(height: 20),
-        const Divider(color: IronMindColors.border),
-        const SizedBox(height: 12),
-        _SettingsRow(
-          icon: Icons.restart_alt,
-          label: 'Redo Onboarding',
-          onTap: _redoOnboarding,
-          color: IronMindColors.warning,
-        ),
-        _SettingsRow(
-          icon: Icons.logout,
-          label: 'Sign Out',
-          onTap: _signOut,
-          color: IronMindColors.alert,
-        ),
-      ],
-    );
   }
 
   String _displayWeight(dynamic value) {
@@ -788,16 +806,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     setState(() => _healthConnected = false);
   }
 
-  Future<void> _toggleNutritionTracking() async {
-    final current = await ApiService.getProfile();
-    final nowTracking = current['trackingNutrition'] == false; // flip it
-    current['trackingNutrition'] = nowTracking;
-    await ApiService.saveLifterProfile(current);
-    if (!mounted) return;
-    setState(() => _profile = current);
-    widget.onNutritionTrackingChanged?.call(nowTracking);
-  }
-
   void _signOut() async {
     await widget.onSignOut();
   }
@@ -944,82 +952,6 @@ class _HealthConnectRow extends StatelessWidget {
   }
 }
 
-class _NutritionTrackingRow extends StatelessWidget {
-  final bool tracking;
-  final VoidCallback onToggle;
-
-  const _NutritionTrackingRow({
-    required this.tracking,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: IronMindColors.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: IronMindColors.border),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.restaurant_outlined, color: IronMindColors.textPrimary, size: 18),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Food Log',
-                  style: GoogleFonts.dmSans(
-                    color: IronMindColors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  tracking ? 'Visible in navigation' : 'Hidden from navigation',
-                  style: GoogleFonts.dmSans(
-                    color: IronMindColors.textMuted,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: onToggle,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 44,
-              height: 24,
-              decoration: BoxDecoration(
-                color: tracking ? IronMindColors.accent : IronMindColors.border,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: AnimatedAlign(
-                duration: const Duration(milliseconds: 180),
-                alignment: tracking ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  margin: const EdgeInsets.all(3),
-                  width: 18,
-                  height: 18,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _EditGoalsInline extends StatefulWidget {
   final Map<String, dynamic> goals;
   final ValueChanged<Map<String, dynamic>> onSaved;
@@ -1112,535 +1044,145 @@ class _EditGoalsInlineState extends State<_EditGoalsInline> {
   }
 }
 
-class _HeroCard extends StatelessWidget {
-  final String name;
-  final String goal;
-  final String style;
-  final String currentWeight;
-  final String targetWeight;
-  final String sessionLength;
-  final String? avatarPath;
-  final VoidCallback? onEditAvatar;
+// ── New profile widgets ───────────────────────────────────────────────────────
 
-  const _HeroCard({
-    required this.name,
-    required this.goal,
-    required this.style,
-    required this.currentWeight,
-    required this.targetWeight,
-    required this.sessionLength,
-    this.avatarPath,
-    this.onEditAvatar,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF101924), Color(0xFF17354D)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: IronMindColors.accent.withValues(alpha: 0.28),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Avatar
-              GestureDetector(
-                onTap: onEditAvatar,
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 34,
-                      backgroundColor: IronMindColors.surfaceElevated,
-                      backgroundImage: avatarPath != null
-                          ? FileImage(File(avatarPath!))
-                          : null,
-                      child: avatarPath == null
-                          ? const Icon(
-                              Icons.person,
-                              color: IronMindColors.textMuted,
-                              size: 30,
-                            )
-                          : null,
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: IronMindColors.accent,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: const Color(0xFF101924),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.edit,
-                          color: IronMindColors.background,
-                          size: 11,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 14),
-              // Name + goal
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name == '—' ? 'IRONMIND ATHLETE' : name.toUpperCase(),
-                      style: GoogleFonts.bebasNeue(
-                        color: IronMindColors.textPrimary,
-                        fontSize: 22,
-                        letterSpacing: 2,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '$goal • $style',
-                      style: GoogleFonts.dmSans(
-                        color: IronMindColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(child: _HeroMetric(label: 'Current', value: currentWeight)),
-              const SizedBox(width: 10),
-              Expanded(child: _HeroMetric(label: 'Target', value: targetWeight)),
-              const SizedBox(width: 10),
-              Expanded(child: _HeroMetric(label: 'Session', value: sessionLength)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeroMetric extends StatelessWidget {
+class _StatCol extends StatelessWidget {
   final String label;
   final String value;
-
-  const _HeroMetric({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: GoogleFonts.dmMono(
-              color: IronMindColors.textSecondary,
-              fontSize: 9,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            style: GoogleFonts.bebasNeue(
-              color: IronMindColors.textPrimary,
-              fontSize: 17,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LiftSummaryCard extends StatelessWidget {
-  final String squat;
-  final String bench;
-  final String deadlift;
-  final String ohp;
-
-  const _LiftSummaryCard({
-    required this.squat,
-    required this.bench,
-    required this.deadlift,
-    required this.ohp,
-  });
+  final Color  color;
+  const _StatCol({required this.label, required this.value, required this.color});
 
   @override
-  Widget build(BuildContext context) {
-    return IronCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'CURRENT LIFTS',
-            style: GoogleFonts.bebasNeue(
-              color: IronMindColors.accent,
-              fontSize: 14,
-              letterSpacing: 1.5,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _LiftRow(label: 'Squat', value: squat),
-          _LiftRow(label: 'Bench', value: bench),
-          _LiftRow(label: 'Deadlift', value: deadlift),
-          _LiftRow(label: 'OHP', value: ohp),
-        ],
-      ),
-    );
-  }
-}
-
-class _LiftRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _LiftRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: GoogleFonts.dmSans(
-                color: IronMindColors.textSecondary,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          Text(
-            value,
-            style: GoogleFonts.dmSans(
-              color: IronMindColors.textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FooterMetric extends StatelessWidget {
-  final String label;
-  final String value;
-  final String sub;
-  final Color color;
-
-  const _FooterMetric({
-    required this.label,
-    required this.value,
-    required this.sub,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Expanded(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.dmMono(
-            color: IronMindColors.textMuted,
-            fontSize: 10,
-            letterSpacing: 1,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          value,
+        Text(value,
           style: GoogleFonts.bebasNeue(
-            color: color,
-            fontSize: 22,
-            letterSpacing: 1.5,
-          ),
-        ),
+            color: color, fontSize: 22, letterSpacing: 0.5)),
         const SizedBox(height: 2),
-        Text(
-          sub,
-          style: GoogleFonts.dmSans(
-            color: IronMindColors.textSecondary,
-            fontSize: 11,
-          ),
-        ),
+        Text(label,
+          style: GoogleFonts.dmMono(
+            color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 0.8),
+          textAlign: TextAlign.center),
       ],
-    );
-  }
+    ),
+  );
 }
 
-// ── Milestone Badges Card ─────────────────────────────────────────────────────
-class _BadgesCard extends StatelessWidget {
-  final int bestStreakDays;
-  final int totalWorkouts;
+class _ActivityCard extends StatelessWidget {
+  final Map<String, dynamic> log;
+  const _ActivityCard({required this.log});
 
-  const _BadgesCard({required this.bestStreakDays, required this.totalWorkouts});
-
-  static const _streakMilestones = [
-    (days: 7,   emoji: '🔥', label: '7-Day\nStreak'),
-    (days: 14,  emoji: '⚡', label: '14-Day\nStreak'),
-    (days: 30,  emoji: '💪', label: '30-Day\nStreak'),
-    (days: 60,  emoji: '🏆', label: '60-Day\nStreak'),
-    (days: 100, emoji: '👑', label: '100-Day\nStreak'),
-  ];
-
-  static const _workoutMilestones = [
-    (count: 10,  emoji: '🥉', label: '10\nWorkouts'),
-    (count: 50,  emoji: '🥈', label: '50\nWorkouts'),
-    (count: 100, emoji: '🥇', label: '100\nWorkouts'),
-    (count: 250, emoji: '💎', label: '250\nWorkouts'),
-    (count: 500, emoji: '🌟', label: '500\nWorkouts'),
-  ];
+  String _fmt(double v) => v >= 1000
+      ? '${(v / 1000).toStringAsFixed(1)}k'
+      : v.toStringAsFixed(0);
 
   @override
   Widget build(BuildContext context) {
-    return IronCard(
+    final exercises = (log['exercises'] as List? ?? []);
+    final name      = (log['day_name'] ?? log['program_name'] ?? 'Workout') as String;
+    final focus     = (log['focus'] ?? '') as String;
+    final rawDate   = log['date']?.toString() ?? log['timestamp']?.toString() ?? '';
+    final date      = DateTime.tryParse(rawDate);
+    const months    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    final dateLabel = date != null
+        ? '${months[date.month - 1]} ${date.day}'
+        : rawDate.split('T').first;
+    final sets = exercises.fold<int>(0, (s, e) => s + ((e['sets'] ?? 1) as num).toInt());
+    final vol  = exercises.fold<double>(0, (s, e) =>
+        s + ((e['weight'] ?? 0) as num).toDouble()
+          * ((e['sets']  ?? 1) as num).toDouble()
+          * ((e['reps']  ?? 1) as num).toDouble());
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: IronMindColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: IronMindColors.border),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'BADGES',
-            style: GoogleFonts.bebasNeue(
-              color: IronMindColors.textSecondary,
-              fontSize: 14,
-              letterSpacing: 1.5,
+          Row(children: [
+            Expanded(
+              child: Text(name,
+                style: GoogleFonts.bebasNeue(
+                  color: IronMindColors.textPrimary,
+                  fontSize: 17, letterSpacing: 1)),
             ),
-          ),
-          const SizedBox(height: 12),
-          // Streak badges
-          Text(
-            'Streak',
-            style: GoogleFonts.dmSans(
-              color: IronMindColors.textSecondary,
-              fontSize: 11,
+            Text(dateLabel,
+              style: GoogleFonts.dmMono(
+                color: IronMindColors.textMuted, fontSize: 10)),
+          ]),
+          if (focus.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(focus,
+                style: GoogleFonts.dmSans(
+                  color: IronMindColors.accent, fontSize: 11)),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: _streakMilestones.map((m) {
-              final unlocked = bestStreakDays >= m.days;
-              return _Badge(emoji: m.emoji, label: m.label, unlocked: unlocked);
-            }).toList(),
-          ),
-          const SizedBox(height: 14),
-          Container(height: 1, color: IronMindColors.border),
-          const SizedBox(height: 14),
-          // Workout count badges
-          Text(
-            'Workouts',
-            style: GoogleFonts.dmSans(
-              color: IronMindColors.textSecondary,
-              fontSize: 11,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: _workoutMilestones.map((m) {
-              final unlocked = totalWorkouts >= m.count;
-              return _Badge(emoji: m.emoji, label: m.label, unlocked: unlocked);
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-          // Progress to next unlocks
-          ..._nextBadgeHint(),
+          if (exercises.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(
+                child: Text(
+                  exercises.take(3).map((e) => e['name'] ?? '').join(' · '),
+                  style: GoogleFonts.dmMono(
+                    color: IronMindColors.textMuted, fontSize: 10),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: IronMindColors.background,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: IronMindColors.border),
+                ),
+                child: Text('$sets sets · ${_fmt(vol)} lbs',
+                  style: GoogleFonts.dmMono(
+                    color: IronMindColors.textSecondary, fontSize: 9)),
+              ),
+            ]),
+          ],
         ],
       ),
     );
   }
-
-  List<Widget> _nextBadgeHint() {
-    final hints = <Widget>[];
-
-    final nextStreak = _streakMilestones
-        .where((m) => bestStreakDays < m.days)
-        .map((m) => m.days)
-        .firstOrNull;
-    if (nextStreak != null) {
-      final remaining = nextStreak - bestStreakDays;
-      hints.add(_ProgressHint(
-        label: '$remaining more streak days to ${nextStreak}d badge',
-        value: bestStreakDays / nextStreak,
-        color: IronMindColors.accent,
-      ));
-    }
-
-    final nextWorkout = _workoutMilestones
-        .where((m) => totalWorkouts < m.count)
-        .map((m) => m.count)
-        .firstOrNull;
-    if (nextWorkout != null) {
-      final remaining = nextWorkout - totalWorkouts;
-      if (hints.isNotEmpty) hints.add(const SizedBox(height: 6));
-      hints.add(_ProgressHint(
-        label: '$remaining more workouts to ${nextWorkout}-session badge',
-        value: totalWorkouts / nextWorkout,
-        color: IronMindColors.success,
-      ));
-    }
-
-    return hints;
-  }
 }
 
-class _Badge extends StatelessWidget {
+class _Badge {
   final String emoji;
   final String label;
-  final bool unlocked;
-
-  const _Badge({required this.emoji, required this.label, required this.unlocked});
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Container(
-        width: 48, height: 48,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: unlocked
-              ? IronMindColors.accent.withValues(alpha: 0.12)
-              : IronMindColors.border.withValues(alpha: 0.3),
-          border: Border.all(
-            color: unlocked ? IronMindColors.accent : IronMindColors.border,
-            width: 1.5,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          unlocked ? emoji : '🔒',
-          style: const TextStyle(fontSize: 20),
-        ),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        label,
-        style: GoogleFonts.dmMono(
-          color: unlocked ? IronMindColors.textPrimary : IronMindColors.textSecondary,
-          fontSize: 8,
-          letterSpacing: 0.3,
-        ),
-        textAlign: TextAlign.center,
-      ),
-    ],
-  );
+  final Color  color;
+  const _Badge({required this.emoji, required this.label, required this.color});
 }
 
-class _ProgressHint extends StatelessWidget {
-  final String label;
-  final double value;
-  final Color color;
-
-  const _ProgressHint({required this.label, required this.value, required this.color});
+class _AchievementPill extends StatelessWidget {
+  final _Badge badge;
+  const _AchievementPill({required this.badge});
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: LinearProgressIndicator(
-          value: value.clamp(0.0, 1.0),
-          minHeight: 4,
-          backgroundColor: IronMindColors.border,
-          valueColor: AlwaysStoppedAnimation(color),
-        ),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        label,
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: badge.color.withOpacity(0.10),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: badge.color.withOpacity(0.35)),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Text(badge.emoji, style: const TextStyle(fontSize: 14)),
+      const SizedBox(width: 5),
+      Text(badge.label,
         style: GoogleFonts.dmSans(
-          color: IronMindColors.textSecondary,
-          fontSize: 11,
-        ),
-      ),
-    ],
+          color: badge.color, fontSize: 11, fontWeight: FontWeight.w600)),
+    ]),
   );
 }
 
-class _GoalFieldInline extends StatelessWidget {
-  final String label;
-  final TextEditingController ctrl;
-  final Color color;
-
-  const _GoalFieldInline({
-    required this.label,
-    required this.ctrl,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 90,
-          child: Text(
-            label,
-            style: GoogleFonts.bebasNeue(
-              color: color,
-              fontSize: 14,
-              letterSpacing: 1.5,
-            ),
-          ),
-        ),
-        Expanded(
-          child: TextField(
-            controller: ctrl,
-            keyboardType: TextInputType.number,
-            style: GoogleFonts.dmMono(
-              color: IronMindColors.textPrimary,
-              fontSize: 16,
-            ),
-            decoration: const InputDecoration(
-              suffixText: 'lbs',
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class _PhotoSourceTile extends StatelessWidget {
   final IconData icon;

@@ -384,118 +384,20 @@ class _WellnessScreenState extends State<WellnessScreen>
           onLogMeasurements: _logMeasurements,
           goalLabel: _goalDistanceLabel(latestWeight),
         ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: IronMindColors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: IronMindColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'BODYWEIGHT GOAL',
-                style: GoogleFonts.bebasNeue(
-                  color: IronMindColors.textSecondary,
-                  fontSize: 18,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _goalDistanceLabel(latestWeight),
-                style: GoogleFonts.bebasNeue(
-                  color: IronMindColors.textPrimary,
-                  fontSize: 22,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                latestWeight == null || goalWeight <= 0
-                    ? 'Log your current weight and set a target to track progress here.'
-                    : 'Current: ${latestWeight.toStringAsFixed(1)} lbs   Target: ${goalWeight.toStringAsFixed(1)} lbs',
-                style: GoogleFonts.dmSans(
-                  color: IronMindColors.textSecondary,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        ),
         const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: _OverviewCard(
-                label: 'Current Weight',
-                value: latestWeight == null
-                    ? '-'
-                    : '${latestWeight.toStringAsFixed(1)} lbs',
-                sub: delta == null
-                    ? 'No previous entry'
-                    : '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)} lbs',
-                accent: IronMindColors.accent,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _OverviewCard(
-                label: 'Target Weight',
-                value: goalWeight <= 0
-                    ? '-'
-                    : '${goalWeight.toStringAsFixed(1)} lbs',
-                sub: _goalDistanceLabel(latestWeight),
-                accent: IronMindColors.success,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _OverviewCard(
-                label: 'Latest Waist',
-                value: latestMeasurement?['waist'] == null
-                    ? '-'
-                    : '${latestMeasurement!['waist']}"',
-                sub: _measurements.isEmpty
-                    ? 'No measurement logs'
-                    : '${_measurements.length} saved logs',
-                accent: IronMindColors.warning,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'WEIGHT TREND',
-          style: GoogleFonts.bebasNeue(
-            color: IronMindColors.textSecondary,
-            fontSize: 16,
-            letterSpacing: 1.5,
-          ),
-        ),
-        const SizedBox(height: 12),
-        _ChartCard(child: _buildWeightChart(sortedWeights)),
-        const SizedBox(height: 20),
-        Text(
-          'RECENT BODYWEIGHT',
-          style: GoogleFonts.bebasNeue(
-            color: IronMindColors.textSecondary,
-            fontSize: 16,
-            letterSpacing: 1.5,
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (sortedWeights.isEmpty)
+        if (sortedWeights.isNotEmpty) ...[
+          SectionHeader(title: 'Weight Trend'),
+          const SizedBox(height: 10),
+          _ChartCard(child: _buildWeightChart(sortedWeights)),
+          const SizedBox(height: 14),
+          ...sortedWeights.reversed
+              .take(5)
+              .map((log) => _BodyweightCard(log: log)),
+        ] else
           const _EmptyMetricPanel(
             icon: Icons.monitor_weight_outlined,
-            text: 'No bodyweight data yet',
-          )
-        else
-          ...sortedWeights.reversed
-              .take(6)
-              .map((log) => _BodyweightCard(log: log)),
+            text: 'No bodyweight entries yet — tap Log Weight to start',
+          ),
         const SizedBox(height: 26),
         Text(
           'LATEST MEASUREMENTS',
@@ -757,7 +659,9 @@ class _WellnessScreenState extends State<WellnessScreen>
                     'notes': notes,
                   });
                   await _load();
-                  if (mounted) Navigator.of(context).pop();
+                  if (!mounted) return;
+                  Navigator.of(context).pop();
+                  _showCheckInQuote(mood: mood, energy: energy, recovery: recovery, sleep: sleep, stress: stress);
                 },
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 48),
@@ -765,6 +669,60 @@ class _WellnessScreenState extends State<WellnessScreen>
                 child: Text(
                   'SAVE',
                   style: GoogleFonts.bebasNeue(fontSize: 18, letterSpacing: 1.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCheckInQuote({
+    required int mood,
+    required int energy,
+    required int recovery,
+    required int sleep,
+    required int stress,
+  }) {
+    final quote = _generateCheckInQuote(
+      mood: mood, energy: energy,
+      recovery: recovery, sleep: sleep, stress: stress,
+    );
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: IronMindColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(quote.emoji, style: const TextStyle(fontSize: 40)),
+              const SizedBox(height: 16),
+              Text(
+                quote.headline,
+                style: GoogleFonts.bebasNeue(
+                  color: IronMindColors.textPrimary,
+                  fontSize: 22, letterSpacing: 1.5),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                quote.body,
+                style: GoogleFonts.dmSans(
+                  color: IronMindColors.textSecondary,
+                  fontSize: 14, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('LET\'S GO',
+                    style: GoogleFonts.bebasNeue(fontSize: 18, letterSpacing: 1.5)),
                 ),
               ),
             ],
@@ -1851,4 +1809,86 @@ class _HealthChip extends StatelessWidget {
       ],
     );
   }
+}
+
+// ── Check-in quote generator ──────────────────────────────────────────────────
+
+class _CheckInQuote {
+  final String emoji;
+  final String headline;
+  final String body;
+  const _CheckInQuote(this.emoji, this.headline, this.body);
+}
+
+_CheckInQuote _generateCheckInQuote({
+  required int mood,
+  required int energy,
+  required int recovery,
+  required int sleep,
+  required int stress,
+}) {
+  final avg = (mood + energy + recovery) / 3.0;
+  final lowSleep  = sleep <= 5;
+  final highStress = stress >= 7;
+
+  // Peak state
+  if (avg >= 8 && !highStress) {
+    const quotes = [
+      _CheckInQuote('🔥', 'You\'re Locked In', 'Your body and mind are aligned right now. Channel this energy — today is a day to push.'),
+      _CheckInQuote('⚡', 'Peak Condition', 'Everything is firing on all cylinders. Trust the process and attack your session.'),
+      _CheckInQuote('💪', 'Ready to Dominate', 'High energy, great recovery, strong mindset. This is what you\'ve been building for.'),
+      _CheckInQuote('🚀', 'Full Send', 'Your numbers say you\'re ready. Go after it with confidence — performance follows preparation.'),
+    ];
+    return quotes[DateTime.now().second % quotes.length];
+  }
+
+  // Good — high mood but some fatigue
+  if (avg >= 6.5) {
+    if (lowSleep) {
+      const quotes = [
+        _CheckInQuote('😤', 'Grit Over Comfort', 'Sleep wasn\'t perfect, but your mindset is solid. Stay focused, manage intensity, and get it done.'),
+        _CheckInQuote('🧠', 'Mind Over Mattress', 'Not your best sleep, but champions train anyway. Listen to your body and keep the fire lit.'),
+      ];
+      return quotes[DateTime.now().second % quotes.length];
+    }
+    const quotes = [
+      _CheckInQuote('💡', 'Feeling Good', 'You\'re in a strong spot today. Stay consistent — this is how progress compounds over time.'),
+      _CheckInQuote('🎯', 'On Track', 'Solid numbers across the board. Keep your head down and put in quality work.'),
+      _CheckInQuote('📈', 'Building Momentum', 'Another good day in the process. Each session like this stacks into something bigger.'),
+    ];
+    return quotes[DateTime.now().second % quotes.length];
+  }
+
+  // Moderate — high stress or low energy
+  if (avg >= 4.5) {
+    if (highStress) {
+      const quotes = [
+        _CheckInQuote('🌊', 'Breathe Through It', 'Stress is high today — that\'s okay. Use your training as an outlet, not a burden. Show up anyway.'),
+        _CheckInQuote('🛡️', 'Hold the Line', 'Not every day feels like a win before it starts. Show up, do the work, and let results speak later.'),
+      ];
+      return quotes[DateTime.now().second % quotes.length];
+    }
+    const quotes = [
+      _CheckInQuote('🔄', 'Steady the Ship', 'A moderate day is still a day of progress. Focus on technique, stay consistent, keep moving.'),
+      _CheckInQuote('🏗️', 'Building Days Count', 'Not every session will feel electric. The ones you show up for anyway are the ones that matter most.'),
+      _CheckInQuote('⚙️', 'Trust the Process', 'Today is a maintenance day. Protect your streak, do the work, and the gains will come.'),
+    ];
+    return quotes[DateTime.now().second % quotes.length];
+  }
+
+  // Low — recovery day needed
+  if (lowSleep && avg < 5) {
+    const quotes = [
+      _CheckInQuote('😴', 'Rest is Training Too', 'Your body is asking for recovery. Prioritise sleep tonight — the iron will be there tomorrow.'),
+      _CheckInQuote('🛌', 'Recharge Mode', 'Listen to what your body is telling you. A strategic rest day is a weapon, not a weakness.'),
+    ];
+    return quotes[DateTime.now().second % quotes.length];
+  }
+
+  const quotes = [
+    _CheckInQuote('💙', 'You Showed Up', 'Logging in on a hard day is a form of discipline too. Be gentle with yourself and keep the habit alive.'),
+    _CheckInQuote('🌱', 'Recovery is Progress', 'Low days don\'t last. Eat well, rest well, and trust that your body is rebuilding stronger.'),
+    _CheckInQuote('🔋', 'Recharge and Return', 'Everyone has low days. The difference is that you tracked it. That awareness is already working in your favour.'),
+  ];
+  return quotes[DateTime.now().second % quotes.length];
 }

@@ -43,11 +43,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   double _sessionLength = 75;
   final Set<String> _equipment = <String>{};
   bool _fullGymAccess = false;
-  bool _trackingNutrition = false;
-  final _calorieController = TextEditingController(text: '2300');
-  final _proteinController = TextEditingController(text: '165');
-  final _carbsController = TextEditingController(text: '250');
-  final _fatController = TextEditingController(text: '65');
   File? _profileImageFile;
   String? _existingAvatarPath;
   bool _loading = true;
@@ -160,34 +155,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       kicker: 'STEP 5',
     ),
     _OnboardingStepMeta(
-      title: 'Fuel Your Training',
-      subtitle: 'Tell IronMind whether you\'re tracking food so it can support your nutrition goals.',
-      kicker: 'STEP 6',
-    ),
-    _OnboardingStepMeta(
       title: 'Current Strength',
       subtitle: 'Enter your best current numbers so the app has a real baseline.',
-      kicker: 'STEP 7',
+      kicker: 'STEP 6',
     ),
     _OnboardingStepMeta(
       title: 'Strength Goals',
       subtitle: 'Now set the numbers you want to chase next.',
-      kicker: 'STEP 8',
+      kicker: 'STEP 7',
     ),
     _OnboardingStepMeta(
       title: 'Training Setup',
       subtitle: 'Tell IronMind how you like to train and what your week looks like.',
-      kicker: 'STEP 9',
+      kicker: 'STEP 8',
     ),
     _OnboardingStepMeta(
       title: 'AI Workout Context',
       subtitle: 'Only share equipment the AI generator should consider when building sessions.',
-      kicker: 'STEP 10',
+      kicker: 'STEP 9',
     ),
     _OnboardingStepMeta(
       title: 'You\'re All Set',
       subtitle: 'Here\'s a quick look at what each section of IronMind does.',
-      kicker: 'STEP 11',
+      kicker: 'STEP 10',
     ),
   ];
 
@@ -298,8 +288,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         double.tryParse(_deadliftController.text.trim()) ?? 0;
     current['currentOhp'] = double.tryParse(_ohpController.text.trim()) ?? 0;
 
-    current['trackingNutrition'] = _trackingNutrition;
-
     // Save avatar image to app documents directory
     if (_profileImageFile != null) {
       try {
@@ -328,14 +316,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       'deadlift': int.tryParse(_goalDeadliftController.text.trim()) ?? 405,
       'ohp': int.tryParse(_goalOhpController.text.trim()) ?? 135,
     });
-    if (_trackingNutrition) {
-      await ApiService.saveNutritionTargets({
-        'calories': int.tryParse(_calorieController.text.trim()) ?? 2300,
-        'protein': int.tryParse(_proteinController.text.trim()) ?? 165,
-        'carbs': int.tryParse(_carbsController.text.trim()) ?? 250,
-        'fat': int.tryParse(_fatController.text.trim()) ?? 65,
-      });
-    }
     await ApiService.completeOnboarding();
     await widget.onComplete();
   }
@@ -398,10 +378,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _goalBenchController.dispose();
     _goalDeadliftController.dispose();
     _goalOhpController.dispose();
-    _calorieController.dispose();
-    _proteinController.dispose();
-    _carbsController.dispose();
-    _fatController.dispose();
     super.dispose();
   }
 
@@ -769,80 +745,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         );
       case 5:
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Are you currently tracking your food intake?',
-              style: GoogleFonts.dmSans(
-                color: IronMindColors.textSecondary,
-                fontSize: 13,
-                height: 1.45,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _SelectionCard(
-              title: 'Yes, I Track Macros',
-              subtitle: 'Set calorie and macro targets so IronMind can support your diet.',
-              icon: Icons.track_changes_outlined,
-              selected: _trackingNutrition,
-              onTap: () => setState(() => _trackingNutrition = true),
-            ),
-            const SizedBox(height: 10),
-            _SelectionCard(
-              title: 'Not Right Now',
-              subtitle: 'Skip nutrition tracking — you can enable it any time from the Food Log tab.',
-              icon: Icons.remove_circle_outline,
-              selected: !_trackingNutrition,
-              onTap: () => setState(() => _trackingNutrition = false),
-            ),
-            if (_trackingNutrition) ...[
-              const SizedBox(height: 20),
-              _LiftField(
-                label: 'Daily Calories',
-                controller: _calorieController,
-                suffixText: 'kcal',
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _LiftField(
-                      label: 'Protein',
-                      controller: _proteinController,
-                      suffixText: 'g',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _LiftField(
-                      label: 'Carbs',
-                      controller: _carbsController,
-                      suffixText: 'g',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _LiftField(
-                      label: 'Fat',
-                      controller: _fatController,
-                      suffixText: 'g',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'You can adjust these any time from the Food Log tab.',
-                style: GoogleFonts.dmSans(
-                  color: IronMindColors.textMuted,
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ],
-        );
-      case 6:
-        return Column(
           children: [
             Row(
               children: [
@@ -878,7 +780,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
-      case 7:
+      case 6:
         return Column(
           children: [
             Row(
@@ -918,7 +820,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
-      case 8:
+      case 7:
         return Column(
           children: [
             DropdownButtonFormField<String>(
@@ -998,7 +900,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
-      case 9:
+      case 8:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1058,7 +960,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         );
-      case 10:
+      case 9:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1078,15 +980,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
             const SizedBox(height: 10),
             const _AppTourCard(
-              icon: Icons.restaurant_outlined,
-              title: 'Food Log',
-              description: 'Log meals, track daily calories and macros, and manage your nutrition targets.',
+              icon: Icons.bar_chart_rounded,
+              title: 'Progress',
+              description: 'See strength trends, personal records, bodyweight history, and weekly consistency at a glance.',
             ),
             const SizedBox(height: 10),
             const _AppTourCard(
-              icon: Icons.home_outlined,
-              title: 'Dashboard',
-              description: 'See your progress at a glance — recent workouts, strength trends, and your training summary.',
+              icon: Icons.supervisor_account_outlined,
+              title: 'Trainer',
+              description: 'Manage clients, build custom programs, and assign workout plans — for coaches and personal trainers.',
             ),
             const SizedBox(height: 10),
             const _AppTourCard(
