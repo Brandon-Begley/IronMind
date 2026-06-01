@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/bar_type.dart';
 import '../services/api_service.dart';
 import '../services/health_service.dart';
 import '../theme.dart';
@@ -271,6 +272,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       checkInCount: _checkInCount,
                       habitCount:   _habitCount,
                     ),
+                    const SizedBox(height: 18),
+
+                    // ── 3. Training Tools ──────────────────────────────────
+                    const SectionHeader(title: 'Training Tools'),
+                    const SizedBox(height: 10),
+                    _TrainingToolsRow(prs: _prs),
                     const SizedBox(height: 18),
 
                     // ── 4. Powerlifting Total ──────────────────────────────
@@ -710,6 +717,613 @@ class _HealthSummaryRow extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+double _dashRound(double v, double step) => (v / step).round() * step;
+
+String _platesText(double total, double barW) {
+  var rem = (total - barW) / 2;
+  if (rem < 0) return 'Under bar weight';
+  if (rem == 0) return 'Bar only';
+  final parts = <String>[];
+  for (final p in [45.0, 35.0, 25.0, 10.0, 5.0, 2.5]) {
+    final n = (rem / p).floor();
+    if (n > 0) {
+      parts.add('$n × ${p == p.truncateToDouble() ? p.toInt() : p}');
+      rem -= n * p;
+    }
+  }
+  return parts.isEmpty ? 'Bar only' : parts.join('  +  ');
+}
+
+// ── Training Tools Row ────────────────────────────────────────────────────────
+
+class _TrainingToolsRow extends StatelessWidget {
+  final List<Map<String, dynamic>> prs;
+  const _TrainingToolsRow({required this.prs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ToolCard(
+            icon: Icons.format_list_numbered_rounded,
+            label: 'SET SCHEME',
+            sub: 'Browse presets',
+            color: IronMindTheme.green,
+            onTap: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => const _DashSchemeSheet(),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _ToolCard(
+            icon: Icons.calculate_outlined,
+            label: 'LOAD CALC',
+            sub: 'Weight + plates',
+            color: IronMindTheme.accent,
+            onTap: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => _DashLoadCalcSheet(prs: prs),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ToolCard extends StatelessWidget {
+  final IconData icon;
+  final String label, sub;
+  final Color color;
+  final VoidCallback onTap;
+  const _ToolCard({
+    required this.icon,
+    required this.label,
+    required this.sub,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        decoration: BoxDecoration(
+          color: IronMindTheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                    style: GoogleFonts.bebasNeue(
+                      color: IronMindTheme.textPrimary, fontSize: 14, letterSpacing: 1)),
+                  Text(sub,
+                    style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 10)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, size: 14, color: IronMindTheme.text3),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Scheme Sheet ──────────────────────────────────────────────────────────────
+
+class _SchemeData {
+  final String label, category, note;
+  final List<int> reps;
+  final double? pct;
+  const _SchemeData(this.label, this.category, this.reps, {this.pct, this.note = ''});
+}
+
+const _dashSchemes = [
+  _SchemeData('5×5',           'Strength',    [5,5,5,5,5],     pct: 0.80, note: 'Classic powerbuilding block'),
+  _SchemeData('5×3',           'Strength',    [3,3,3,3,3],     pct: 0.85, note: 'Heavy compound strength'),
+  _SchemeData('3×3',           'Strength',    [3,3,3],         pct: 0.90, note: 'Near-max effort triples'),
+  _SchemeData('4×6',           'Strength',    [6,6,6,6],       pct: 0.75, note: 'Strength-hypertrophy blend'),
+  _SchemeData('Wendler 5/3/1', 'Strength',    [5,3,1],                    note: 'Week-by-week intensity wave'),
+  _SchemeData('4×8',           'Hypertrophy', [8,8,8,8],       pct: 0.70, note: 'Standard hypertrophy work'),
+  _SchemeData('4×10',          'Hypertrophy', [10,10,10,10],   pct: 0.65, note: 'Volume accumulation'),
+  _SchemeData('3×12',          'Hypertrophy', [12,12,12],      pct: 0.60, note: 'Pump + muscle endurance'),
+  _SchemeData('5×8',           'Hypertrophy', [8,8,8,8,8],     pct: 0.68, note: 'High-volume hypertrophy'),
+  _SchemeData('4×2',           'Peaking',     [2,2,2,2],       pct: 0.92, note: 'Competition prep doubles'),
+  _SchemeData('5×2',           'Peaking',     [2,2,2,2,2],     pct: 0.90, note: 'Accumulate quality doubles'),
+  _SchemeData('3×1',           'Peaking',     [1,1,1],         pct: 0.97, note: 'Max attempt singles'),
+  _SchemeData('Wave 3-2-1',    'Peaking',     [3,2,1,3,2,1],              note: '87 / 92 / 97% across waves'),
+];
+
+class _DashSchemeSheet extends StatefulWidget {
+  const _DashSchemeSheet();
+  @override
+  State<_DashSchemeSheet> createState() => _DashSchemeSheetState();
+}
+
+class _DashSchemeSheetState extends State<_DashSchemeSheet>
+    with SingleTickerProviderStateMixin {
+  late TabController _tc;
+
+  @override
+  void initState() {
+    super.initState();
+    _tc = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tc.dispose();
+    super.dispose();
+  }
+
+  List<_SchemeData> _forCat(String c) =>
+      _dashSchemes.where((s) => s.category == c).toList();
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.78,
+      minChildSize: 0.5,
+      maxChildSize: 0.94,
+      builder: (_, ctrl) => Container(
+        decoration: const BoxDecoration(
+          color: IronMindTheme.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: IronMindTheme.border, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Set Scheme Reference',
+                  style: GoogleFonts.bebasNeue(
+                    color: IronMindTheme.textPrimary, fontSize: 24, letterSpacing: 1.5)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: IronMindTheme.surface2, borderRadius: BorderRadius.circular(10)),
+              child: TabBar(
+                controller: _tc,
+                indicator: BoxDecoration(
+                  color: IronMindTheme.green, borderRadius: BorderRadius.circular(8)),
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: IronMindTheme.bg,
+                unselectedLabelColor: IronMindTheme.text2,
+                labelStyle: GoogleFonts.dmMono(fontSize: 10, letterSpacing: 1),
+                dividerColor: Colors.transparent,
+                padding: const EdgeInsets.all(3),
+                tabs: const [
+                  Tab(text: 'STRENGTH'),
+                  Tab(text: 'HYPERTROPHY'),
+                  Tab(text: 'PEAKING'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: TabBarView(
+                controller: _tc,
+                children: ['Strength', 'Hypertrophy', 'Peaking'].map((cat) {
+                  final schemes = _forCat(cat);
+                  return ListView.builder(
+                    controller: ctrl,
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                    itemCount: schemes.length,
+                    itemBuilder: (_, i) => _DashSchemeCard(scheme: schemes[i]),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DashSchemeCard extends StatelessWidget {
+  final _SchemeData scheme;
+  const _DashSchemeCard({required this.scheme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: IronMindTheme.surface2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: IronMindTheme.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(scheme.label,
+                  style: GoogleFonts.bebasNeue(
+                    color: IronMindTheme.textPrimary, fontSize: 17, letterSpacing: 1)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 4, runSpacing: 4,
+                  children: scheme.reps.map((r) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: IronMindTheme.green.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: IronMindTheme.green.withValues(alpha: 0.3)),
+                    ),
+                    child: Text('$r',
+                      style: GoogleFonts.dmMono(
+                        color: IronMindTheme.green, fontSize: 10)),
+                  )).toList(),
+                ),
+                if (scheme.note.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(scheme.note,
+                    style: GoogleFonts.dmSans(
+                      color: IronMindTheme.text3, fontSize: 11)),
+                ],
+              ],
+            ),
+          ),
+          if (scheme.pct != null) ...[
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: IronMindTheme.accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: IronMindTheme.accent.withValues(alpha: 0.3)),
+              ),
+              child: Text('${(scheme.pct! * 100).round()}%',
+                style: GoogleFonts.bebasNeue(
+                  color: IronMindTheme.accent, fontSize: 18)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Load Calculator Sheet ─────────────────────────────────────────────────────
+
+class _DashLoadCalcSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> prs;
+  const _DashLoadCalcSheet({required this.prs});
+  @override
+  State<_DashLoadCalcSheet> createState() => _DashLoadCalcSheetState();
+}
+
+class _DashLoadCalcSheetState extends State<_DashLoadCalcSheet> {
+  BarType? _bar;
+  double _pct = 0.80;
+  final _maxCtrl = TextEditingController();
+  String? _selectedPr;
+
+  double get _barW   => _bar != null ? barSpecFor(_bar!).weightLb : 0;
+  double get _e1rm   => double.tryParse(_maxCtrl.text) ?? 0;
+  double get _target => _dashRound(_e1rm * _pct, 2.5);
+  bool   get _valid  => _e1rm > 0;
+
+  @override
+  void dispose() {
+    _maxCtrl.dispose();
+    super.dispose();
+  }
+
+  void _fillFromPr(String? label) {
+    if (label == null) return;
+    final pr = widget.prs.firstWhere(
+      (p) => p['exercise']?.toString() == label,
+      orElse: () => {},
+    );
+    if (pr.isEmpty) return;
+    final e1rm = (pr['estimated_1rm'] as num?)?.toDouble();
+    if (e1rm != null && e1rm > 0) {
+      _maxCtrl.text = e1rm.toStringAsFixed(0);
+    } else {
+      final w = (pr['weight'] as num?)?.toDouble() ?? 0;
+      final r = (pr['reps']   as num?)?.toInt()    ?? 1;
+      if (w > 0) {
+        _maxCtrl.text =
+          _dashRound(w * (1 + r / 30.0), 2.5).toStringAsFixed(0);
+      }
+    }
+    setState(() => _selectedPr = label);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.70,
+      minChildSize: 0.5,
+      maxChildSize: 0.94,
+      builder: (_, ctrl) => Container(
+        decoration: const BoxDecoration(
+          color: IronMindTheme.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: IronMindTheme.border, borderRadius: BorderRadius.circular(2)),
+            ),
+            Expanded(
+              child: ListView(
+                controller: ctrl,
+                padding: EdgeInsets.fromLTRB(
+                  20, 14, 20,
+                  MediaQuery.of(context).viewInsets.bottom + 32),
+                children: [
+                  Text('Load Calculator',
+                    style: GoogleFonts.bebasNeue(
+                      color: IronMindTheme.textPrimary,
+                      fontSize: 24, letterSpacing: 1.5)),
+                  const SizedBox(height: 20),
+
+                  // Quick-fill from PRs
+                  if (widget.prs.isNotEmpty) ...[
+                    Text('QUICK FILL FROM PR',
+                      style: GoogleFonts.dmMono(
+                        color: IronMindTheme.text3,
+                        fontSize: 9, letterSpacing: 1.2)),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: IronMindTheme.surface2,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: IronMindTheme.border),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isExpanded: true,
+                          value: _selectedPr,
+                          hint: Text('Pick an exercise',
+                            style: GoogleFonts.dmSans(
+                              color: IronMindTheme.text3, fontSize: 13)),
+                          dropdownColor: IronMindTheme.surface2,
+                          style: GoogleFonts.dmSans(
+                            color: IronMindTheme.textPrimary, fontSize: 13),
+                          items: widget.prs.map((pr) {
+                            final ex = pr['exercise']?.toString() ?? '';
+                            return DropdownMenuItem(value: ex, child: Text(ex));
+                          }).toList(),
+                          onChanged: _fillFromPr,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // 1RM input
+                  Text('ESTIMATED 1RM (LB)',
+                    style: GoogleFonts.dmMono(
+                      color: IronMindTheme.text3,
+                      fontSize: 9, letterSpacing: 1.2)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _maxCtrl,
+                    keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                    style: GoogleFonts.bebasNeue(
+                      color: IronMindTheme.textPrimary, fontSize: 26),
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: '315',
+                      hintStyle: GoogleFonts.bebasNeue(
+                        color: IronMindTheme.text3, fontSize: 26),
+                      suffixText: 'lb',
+                      suffixStyle: GoogleFonts.dmMono(
+                        color: IronMindTheme.text3, fontSize: 12),
+                      enabledBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: IronMindTheme.border)),
+                      focusedBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: IronMindTheme.accent)),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Bar type
+                  Text('BAR TYPE',
+                    style: GoogleFonts.dmMono(
+                      color: IronMindTheme.text3,
+                      fontSize: 9, letterSpacing: 1.2)),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: BarType.values.map((t) {
+                        final spec = barSpecFor(t);
+                        final sel  = _bar == t;
+                        return GestureDetector(
+                          onTap: () => setState(() => _bar = sel ? null : t),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: sel
+                                ? IronMindTheme.accent.withValues(alpha: 0.15)
+                                : IronMindTheme.surface2,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: sel
+                                  ? IronMindTheme.accent
+                                  : IronMindTheme.border,
+                                width: sel ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(spec.shortName,
+                                  style: GoogleFonts.dmSans(
+                                    color: sel
+                                      ? IronMindTheme.accent
+                                      : IronMindTheme.text2,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600)),
+                                Text('${spec.weightLb.toInt()} lb',
+                                  style: GoogleFonts.dmMono(
+                                    color: sel
+                                      ? IronMindTheme.accent
+                                      : IronMindTheme.text3,
+                                    fontSize: 9)),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Intensity slider
+                  Row(
+                    children: [
+                      Text('INTENSITY',
+                        style: GoogleFonts.dmMono(
+                          color: IronMindTheme.text3,
+                          fontSize: 9, letterSpacing: 1.2)),
+                      const Spacer(),
+                      Text('${(_pct * 100).round()}% of 1RM',
+                        style: GoogleFonts.bebasNeue(
+                          color: IronMindTheme.accent, fontSize: 16)),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: IronMindTheme.accent,
+                      thumbColor: IronMindTheme.accent,
+                      inactiveTrackColor: IronMindTheme.border,
+                      overlayColor:
+                        IronMindTheme.accent.withValues(alpha: 0.15),
+                    ),
+                    child: Slider(
+                      value: _pct,
+                      min: 0.50,
+                      max: 1.00,
+                      divisions: 20,
+                      onChanged: (v) => setState(() => _pct = v),
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('50%',
+                        style: GoogleFonts.dmMono(
+                          color: IronMindTheme.text3, fontSize: 9)),
+                      Text('100%',
+                        style: GoogleFonts.dmMono(
+                          color: IronMindTheme.text3, fontSize: 9)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Result
+                  if (_valid) Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: IronMindTheme.accent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: IronMindTheme.accent.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(_target.toStringAsFixed(0),
+                              style: GoogleFonts.bebasNeue(
+                                color: IronMindTheme.accent,
+                                fontSize: 52, height: 1)),
+                            const SizedBox(width: 6),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Text('lb total',
+                                style: GoogleFonts.dmMono(
+                                  color: IronMindTheme.text2, fontSize: 13)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (_bar != null) ...[
+                          Text(
+                            _platesText(_target, _barW),
+                            style: GoogleFonts.dmMono(
+                              color: IronMindTheme.textPrimary, fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 4),
+                          Text('per side',
+                            style: GoogleFonts.dmSans(
+                              color: IronMindTheme.text3, fontSize: 10)),
+                        ] else
+                          Text('Select a bar to see plate breakdown',
+                            style: GoogleFonts.dmSans(
+                              color: IronMindTheme.text3, fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

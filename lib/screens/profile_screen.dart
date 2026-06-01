@@ -1183,6 +1183,50 @@ class _AchievementPill extends StatelessWidget {
   );
 }
 
+class _GoalFieldInline extends StatelessWidget {
+  final String label;
+  final TextEditingController ctrl;
+  final Color color;
+  const _GoalFieldInline({
+    required this.label,
+    required this.ctrl,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      SizedBox(
+        width: 90,
+        child: Text(
+          label,
+          style: GoogleFonts.bebasNeue(
+            color: color, fontSize: 16, letterSpacing: 1.5),
+        ),
+      ),
+      Expanded(
+        child: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          style: GoogleFonts.dmMono(
+            color: IronMindColors.textPrimary, fontSize: 16),
+          decoration: InputDecoration(
+            suffix: Text(
+              'lbs',
+              style: GoogleFonts.dmMono(
+                color: IronMindColors.textMuted, fontSize: 12),
+            ),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: color.withOpacity(0.5))),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: color)),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 
 class _PhotoSourceTile extends StatelessWidget {
   final IconData icon;

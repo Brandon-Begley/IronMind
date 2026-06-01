@@ -32,7 +32,7 @@ class _WellnessScreenState extends State<WellnessScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _load();
   }
 
@@ -124,9 +124,10 @@ class _WellnessScreenState extends State<WellnessScreen>
                 unselectedLabelColor: IronMindColors.textSecondary,
                 padding: const EdgeInsets.all(4),
                 tabs: const [
-                  Tab(text: 'BODY METRICS'),
+                  Tab(text: 'BODY'),
                   Tab(text: 'CHECK-IN'),
                   Tab(text: 'HABITS'),
+                  Tab(text: 'NUTRITION'),
                 ],
               ),
             ),
@@ -144,6 +145,7 @@ class _WellnessScreenState extends State<WellnessScreen>
                   _buildBodyMetricsTab(),
                   _buildCheckInTab(),
                   const HabitsTab(),
+                  const _NutritionTab(),
                 ],
               ),
       ),
@@ -1892,3 +1894,571 @@ _CheckInQuote _generateCheckInQuote({
   ];
   return quotes[DateTime.now().second % quotes.length];
 }
+
+// ── Nutrition Tab ─────────────────────────────────────────────────────────────
+
+class _NutritionTab extends StatefulWidget {
+  const _NutritionTab();
+
+  @override
+  State<_NutritionTab> createState() => _NutritionTabState();
+}
+
+class _NutritionTabState extends State<_NutritionTab> {
+  List<Map<String, dynamic>> _entries = [];
+  Map<String, dynamic> _targets = {};
+  int _waterGlasses = 0;
+  bool _loading = true;
+  late String _dateKey;
+
+  static const _meals = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Other'];
+
+  @override
+  void initState() {
+    super.initState();
+    _dateKey = _todayKey();
+    _load();
+  }
+
+  String _todayKey() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _load() async {
+    final entries = await ApiService.getFoodEntries(_dateKey);
+    final targets = await ApiService.getNutritionTargets();
+    final water   = await ApiService.getWaterGlasses(_dateKey);
+    if (!mounted) return;
+    setState(() {
+      _entries      = entries;
+      _targets      = targets;
+      _waterGlasses = water;
+      _loading      = false;
+    });
+  }
+
+  int get _totalCalories  => _entries.fold(0, (s, e) => s + ((e['calories'] as num?)?.toInt() ?? 0));
+  double get _totalProtein => _entries.fold(0.0, (s, e) => s + ((e['protein'] as num?)?.toDouble() ?? 0));
+  double get _totalCarbs   => _entries.fold(0.0, (s, e) => s + ((e['carbs']   as num?)?.toDouble() ?? 0));
+  double get _totalFat     => _entries.fold(0.0, (s, e) => s + ((e['fat']     as num?)?.toDouble() ?? 0));
+
+  int get _targetCal  => (_targets['calories'] as num?)?.toInt()  ?? 2300;
+  int get _targetPro  => (_targets['protein']  as num?)?.toInt()  ?? 260;
+  int get _targetCarb => (_targets['carbs']    as num?)?.toInt()  ?? 200;
+  int get _targetFat  => (_targets['fat']      as num?)?.toInt()  ?? 55;
+
+  Future<void> _addEntry() async {
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _AddFoodSheet(),
+    );
+    if (result == null) return;
+    await ApiService.saveFoodEntry(_dateKey, result);
+    _load();
+  }
+
+  Future<void> _deleteEntry(int index) async {
+    await ApiService.deleteFoodEntry(_dateKey, index);
+    _load();
+  }
+
+  Future<void> _setWater(int glasses) async {
+    await ApiService.setWaterGlasses(_dateKey, glasses);
+    setState(() => _waterGlasses = glasses.clamp(0, 20));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: IronMindColors.accent));
+    }
+
+    final calPct   = _targetCal  > 0 ? (_totalCalories  / _targetCal).clamp(0.0, 1.0)  : 0.0;
+    final proPct   = _targetPro  > 0 ? (_totalProtein   / _targetPro).clamp(0.0, 1.0)  : 0.0;
+    final carbPct  = _targetCarb > 0 ? (_totalCarbs     / _targetCarb).clamp(0.0, 1.0) : 0.0;
+    final fatPct   = _targetFat  > 0 ? (_totalFat       / _targetFat).clamp(0.0, 1.0)  : 0.0;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      children: [
+        // ── Daily summary card ─────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: IronMindColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: IronMindColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('TODAY',
+                    style: GoogleFonts.dmMono(
+                      color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.5)),
+                  Text(_dateKey,
+                    style: GoogleFonts.dmMono(
+                      color: IronMindColors.textMuted, fontSize: 9)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _MacroCircle('Calories', _totalCalories, _targetCal, 'kcal', IronMindColors.accent, calPct),
+                  _MacroCircle('Protein',  _totalProtein.round(), _targetPro, 'g', IronMindColors.success, proPct),
+                  _MacroCircle('Carbs',    _totalCarbs.round(),   _targetCarb, 'g', IronMindColors.accent,  carbPct),
+                  _MacroCircle('Fat',      _totalFat.round(),     _targetFat, 'g',  IronMindColors.warning, fatPct),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Water tracker ──────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: IronMindColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: IronMindColors.border),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.water_drop_outlined, color: IronMindColors.accent, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('WATER',
+                      style: GoogleFonts.dmMono(
+                        color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.2)),
+                    Text('$_waterGlasses / 8 glasses',
+                      style: GoogleFonts.dmSans(
+                        color: IronMindColors.textPrimary, fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => _setWater(_waterGlasses - 1),
+                    child: Container(
+                      width: 30, height: 30,
+                      decoration: BoxDecoration(
+                        color: IronMindColors.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: IronMindColors.border),
+                      ),
+                      child: const Icon(Icons.remove, size: 14, color: IronMindColors.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => _setWater(_waterGlasses + 1),
+                    child: Container(
+                      width: 30, height: 30,
+                      decoration: BoxDecoration(
+                        color: IronMindColors.accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: IronMindColors.accent.withValues(alpha: 0.3)),
+                      ),
+                      child: const Icon(Icons.add, size: 14, color: IronMindColors.accent),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Log food button ────────────────────────────────────────────────
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _addEntry,
+            icon: const Icon(Icons.add, size: 16),
+            label: Text('LOG FOOD',
+              style: GoogleFonts.bebasNeue(fontSize: 16, letterSpacing: 1.5)),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // ── Meal sections ──────────────────────────────────────────────────
+        if (_entries.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Column(
+                children: [
+                  Icon(Icons.restaurant_menu_outlined,
+                    color: IronMindColors.textMuted, size: 36),
+                  const SizedBox(height: 12),
+                  Text('No food logged today.',
+                    style: GoogleFonts.dmSans(
+                      color: IronMindColors.textMuted, fontSize: 13)),
+                  Text('Tap LOG FOOD to add a meal.',
+                    style: GoogleFonts.dmSans(
+                      color: IronMindColors.textMuted, fontSize: 12)),
+                ],
+              ),
+            ),
+          )
+        else
+          ..._meals.where((meal) =>
+            _entries.any((e) => (e['meal'] as String? ?? 'Other') == meal)
+          ).map((meal) {
+            final mealEntries = _entries
+                .asMap().entries
+                .where((e) => (e.value['meal'] as String? ?? 'Other') == meal)
+                .toList();
+            final mealCal = mealEntries.fold(0, (s, e) =>
+                s + ((e.value['calories'] as num?)?.toInt() ?? 0));
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(meal.toUpperCase(),
+                        style: GoogleFonts.dmMono(
+                          color: IronMindColors.textMuted,
+                          fontSize: 9, letterSpacing: 1.5)),
+                      Text('$mealCal kcal',
+                        style: GoogleFonts.dmMono(
+                          color: IronMindColors.accent, fontSize: 9)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ...mealEntries.map((e) => _FoodEntryTile(
+                    entry: e.value,
+                    onDelete: () => _deleteEntry(e.key),
+                  )),
+                ],
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}
+
+class _MacroCircle extends StatelessWidget {
+  final String label;
+  final int value;
+  final int target;
+  final String unit;
+  final Color color;
+  final double pct;
+
+  const _MacroCircle(this.label, this.value, this.target, this.unit, this.color, this.pct);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          width: 56, height: 56,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CircularProgressIndicator(
+                value: pct,
+                strokeWidth: 4,
+                backgroundColor: IronMindColors.border,
+                valueColor: AlwaysStoppedAnimation(color),
+              ),
+              Center(
+                child: Text('$value',
+                  style: GoogleFonts.bebasNeue(
+                    color: IronMindColors.textPrimary, fontSize: 14)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(label,
+          style: GoogleFonts.dmMono(
+            color: IronMindColors.textMuted, fontSize: 8, letterSpacing: 0.5)),
+        Text('/ $target$unit',
+          style: GoogleFonts.dmMono(
+            color: IronMindColors.textMuted, fontSize: 7)),
+      ],
+    );
+  }
+}
+
+class _FoodEntryTile extends StatelessWidget {
+  final Map<String, dynamic> entry;
+  final VoidCallback onDelete;
+  const _FoodEntryTile({required this.entry, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final cal  = (entry['calories'] as num?)?.toInt()    ?? 0;
+    final pro  = (entry['protein']  as num?)?.toDouble() ?? 0.0;
+    final carb = (entry['carbs']    as num?)?.toDouble() ?? 0.0;
+    final fat  = (entry['fat']      as num?)?.toDouble() ?? 0.0;
+    final name = entry['name']?.toString() ?? 'Unknown';
+    final srv  = entry['serving']?.toString() ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: IronMindColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: IronMindColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name,
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textPrimary,
+                    fontSize: 13, fontWeight: FontWeight.w500)),
+                if (srv.isNotEmpty)
+                  Text(srv,
+                    style: GoogleFonts.dmSans(
+                      color: IronMindColors.textMuted, fontSize: 11)),
+                const SizedBox(height: 4),
+                Row(children: [
+                  _MacroBadge('${cal}kcal', IronMindColors.accent),
+                  const SizedBox(width: 6),
+                  _MacroBadge('P ${pro.toStringAsFixed(0)}g', IronMindColors.success),
+                  const SizedBox(width: 6),
+                  _MacroBadge('C ${carb.toStringAsFixed(0)}g', IronMindColors.accent),
+                  const SizedBox(width: 6),
+                  _MacroBadge('F ${fat.toStringAsFixed(0)}g', IronMindColors.warning),
+                ]),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: onDelete,
+            child: const Icon(Icons.close, size: 16, color: IronMindColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MacroBadge extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _MacroBadge(this.text, this.color);
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Text(text,
+      style: GoogleFonts.dmMono(color: color, fontSize: 8)),
+  );
+}
+
+// ── Add Food Sheet ────────────────────────────────────────────────────────────
+
+class _AddFoodSheet extends StatefulWidget {
+  const _AddFoodSheet();
+
+  @override
+  State<_AddFoodSheet> createState() => _AddFoodSheetState();
+}
+
+class _AddFoodSheetState extends State<_AddFoodSheet> {
+  final _nameCtrl    = TextEditingController();
+  final _servingCtrl = TextEditingController(text: '1 serving');
+  final _calCtrl     = TextEditingController();
+  final _proCtrl     = TextEditingController();
+  final _carbCtrl    = TextEditingController();
+  final _fatCtrl     = TextEditingController();
+  String _meal = 'Other';
+
+  static const _meals = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Other'];
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose(); _servingCtrl.dispose();
+    _calCtrl.dispose();  _proCtrl.dispose();
+    _carbCtrl.dispose(); _fatCtrl.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final name = _nameCtrl.text.trim();
+    final cal  = int.tryParse(_calCtrl.text.trim()) ?? 0;
+    if (name.isEmpty || cal <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name and calories are required.')));
+      return;
+    }
+    Navigator.pop(context, {
+      'name':     name,
+      'serving':  _servingCtrl.text.trim(),
+      'calories': cal,
+      'protein':  double.tryParse(_proCtrl.text.trim())  ?? 0.0,
+      'carbs':    double.tryParse(_carbCtrl.text.trim())  ?? 0.0,
+      'fat':      double.tryParse(_fatCtrl.text.trim())   ?? 0.0,
+      'meal':     _meal,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      minChildSize: 0.5,
+      maxChildSize: 0.92,
+      builder: (_, ctrl) => Container(
+        decoration: const BoxDecoration(
+          color: IronMindColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: IronMindColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                controller: ctrl,
+                padding: EdgeInsets.fromLTRB(
+                  20, 14, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+                children: [
+                  Text('LOG FOOD', style: GoogleFonts.dmMono(
+                    color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.5)),
+                  const SizedBox(height: 4),
+                  Text('Add what you ate',
+                    style: GoogleFonts.bebasNeue(
+                      color: IronMindColors.textPrimary, fontSize: 22, letterSpacing: 1.5)),
+                  const SizedBox(height: 16),
+
+                  // Meal picker
+                  Text('MEAL', style: GoogleFonts.dmMono(
+                    color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.2)),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _meals.map((m) => GestureDetector(
+                        onTap: () => setState(() => _meal = m),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 120),
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: _meal == m
+                                ? IronMindColors.accent.withValues(alpha: 0.12)
+                                : IronMindColors.surfaceElevated,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _meal == m
+                                  ? IronMindColors.accent
+                                  : IronMindColors.border,
+                              width: _meal == m ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Text(m, style: GoogleFonts.dmSans(
+                            color: _meal == m
+                                ? IronMindColors.accent
+                                : IronMindColors.textSecondary,
+                            fontSize: 12, fontWeight: FontWeight.w500)),
+                        ),
+                      )).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Name + serving
+                  _nutField('Food name', _nameCtrl, TextInputType.text),
+                  const SizedBox(height: 10),
+                  _nutField('Serving (e.g. 200g, 1 cup)', _servingCtrl, TextInputType.text),
+                  const SizedBox(height: 16),
+
+                  // Macros row
+                  Text('MACROS', style: GoogleFonts.dmMono(
+                    color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.2)),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(child: _nutField('Calories', _calCtrl,
+                      const TextInputType.numberWithOptions(decimal: false))),
+                    const SizedBox(width: 8),
+                    Expanded(child: _nutField('Protein g', _proCtrl,
+                      const TextInputType.numberWithOptions(decimal: true))),
+                  ]),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Expanded(child: _nutField('Carbs g', _carbCtrl,
+                      const TextInputType.numberWithOptions(decimal: true))),
+                    const SizedBox(width: 8),
+                    Expanded(child: _nutField('Fat g', _fatCtrl,
+                      const TextInputType.numberWithOptions(decimal: true))),
+                  ]),
+                  const SizedBox(height: 24),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _save,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text('ADD TO LOG',
+                        style: GoogleFonts.bebasNeue(fontSize: 18, letterSpacing: 1.5)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Widget _nutField(String label, TextEditingController ctrl, TextInputType kb) =>
+    TextField(
+      controller: ctrl,
+      keyboardType: kb,
+      style: GoogleFonts.dmSans(color: IronMindColors.textPrimary, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: GoogleFonts.dmSans(color: IronMindColors.textSecondary, fontSize: 12),
+        enabledBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: IronMindColors.border)),
+        focusedBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: IronMindColors.accent)),
+      ),
+    );

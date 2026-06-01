@@ -1,4 +1,7 @@
 {
-  "dart.flutterSdkPath": "C:\\flutter",
-  "dart.checkForSdkUpdates": false
+  "dart.flutterSdkPath": "C:\\src\\flutter",
+  "dart.checkForSdkUpdates": false,
+  "editor.formatOnSave": true,
+  "dart.debugExternalPackageLibraries": false,
+  "dart.debugSdkLibraries": false
 }

@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/powerlifting_total_card.dart';
+import '../models/bar_type.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -856,19 +857,28 @@ class _PRCard extends StatelessWidget {
 
 // ── Power Matrix sheet ────────────────────────────────────────────────────────
 
-class _PowerMatrixSheet extends StatelessWidget {
+class _PowerMatrixSheet extends StatefulWidget {
   final Map<String, dynamic> pr;
   final _Readiness readiness;
 
   const _PowerMatrixSheet({required this.pr, required this.readiness});
 
   @override
+  State<_PowerMatrixSheet> createState() => _PowerMatrixSheetState();
+}
+
+class _PowerMatrixSheetState extends State<_PowerMatrixSheet> {
+  BarType? _selectedBar;
+
+  double get _barWeight => _selectedBar != null ? barSpecFor(_selectedBar!).weightLb : 45.0;
+
+  @override
   Widget build(BuildContext context) {
-    final exercise = pr['exercise'] as String? ?? '';
-    final weight   = (pr['weight'] as num?)?.toDouble() ?? 0;
-    final reps     = (pr['reps']   as num?)?.toInt()    ?? 0;
-    final est1rm   = (pr['estimated_1rm'] as num?)?.toDouble()
-                  ?? (pr['estimated1rm']  as num?)?.toDouble()
+    final exercise = widget.pr['exercise'] as String? ?? '';
+    final weight   = (widget.pr['weight'] as num?)?.toDouble() ?? 0;
+    final reps     = (widget.pr['reps']   as num?)?.toInt()    ?? 0;
+    final est1rm   = (widget.pr['estimated_1rm'] as num?)?.toDouble()
+                  ?? (widget.pr['estimated1rm']  as num?)?.toDouble()
                   ?? ApiService.calculate1RM(weight, reps);
 
     return DraggableScrollableSheet(
@@ -907,31 +917,45 @@ class _PowerMatrixSheet extends StatelessWidget {
                   const SizedBox(width: 8),
                   IronBadge('~${est1rm.round()} lb 1RM', color: IronMindTheme.green),
                 ]),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+
+                // Bar selector
+                _BarSelector(
+                  selected: _selectedBar,
+                  onChanged: (t) => setState(() => _selectedBar = t),
+                ),
+                const SizedBox(height: 16),
 
                 // Readiness context
-                _MatrixReadinessRow(readiness: readiness),
+                _MatrixReadinessRow(readiness: widget.readiness),
                 const SizedBox(height: 20),
 
                 // Column headers
-                _MatrixHeader(),
+                _MatrixHeader(showPlates: _selectedBar != null),
                 const SizedBox(height: 4),
                 const Divider(height: 1, color: IronMindTheme.border),
                 const SizedBox(height: 4),
 
                 // Matrix rows
                 ..._matrixRows.map((row) => _MatrixRow(
-                  pct:     row.pct,
-                  weight:  _roundToPlate(est1rm * row.pct),
-                  reps:    row.reps,
-                  zone:    row.zone,
-                  isPR:    row.isPRZone,
-                  isReady: readiness.score >= 0.85,
+                  pct:        row.pct,
+                  weight:     _roundToPlate(est1rm * row.pct),
+                  barWeight:  _barWeight,
+                  reps:       row.reps,
+                  zone:       row.zone,
+                  isPR:       row.isPRZone,
+                  isReady:    widget.readiness.score >= 0.85,
+                  showPlates: _selectedBar != null,
                 )),
 
                 const SizedBox(height: 20),
                 _ZoneLegend(),
+                const SizedBox(height: 20),
+
+                // RPE reference table
+                _RpeChart(est1rm: est1rm),
                 const SizedBox(height: 16),
+
                 _PercentageExplainer(),
               ],
             ),
@@ -1018,11 +1042,14 @@ class _MatrixReadinessRow extends StatelessWidget {
 }
 
 class _MatrixHeader extends StatelessWidget {
+  final bool showPlates;
+  const _MatrixHeader({this.showPlates = false});
+
   @override
   Widget build(BuildContext context) {
     return Row(children: [
       _col('% 1RM', flex: 2, align: TextAlign.left),
-      _col('Weight', flex: 3, align: TextAlign.center),
+      _col(showPlates ? 'TOTAL / PLATES' : 'WEIGHT', flex: 3, align: TextAlign.center),
       _col('Reps', flex: 2, align: TextAlign.center),
       _col('Zone', flex: 4, align: TextAlign.right),
     ]);
@@ -1041,15 +1068,18 @@ class _MatrixHeader extends StatelessWidget {
 class _MatrixRow extends StatelessWidget {
   final double pct;
   final double weight;
+  final double barWeight;
   final String reps;
   final String zone;
   final bool   isPR;
   final bool   isReady;
+  final bool   showPlates;
 
   const _MatrixRow({
-    required this.pct,    required this.weight,
-    required this.reps,   required this.zone,
-    required this.isPR,   required this.isReady,
+    required this.pct,       required this.weight,
+    required this.barWeight, required this.reps,
+    required this.zone,      required this.isPR,
+    required this.isReady,   this.showPlates = false,
   });
 
   @override
@@ -1065,8 +1095,10 @@ class _MatrixRow extends StatelessWidget {
 
     final isHighlighted = isPR && isReady;
     final bg = isHighlighted
-        ? IronMindTheme.green.withOpacity(0.08)
-        : isPR ? IronMindTheme.accent.withOpacity(0.05) : Colors.transparent;
+        ? IronMindTheme.green.withValues(alpha: 0.08)
+        : isPR ? IronMindTheme.accent.withValues(alpha: 0.05) : Colors.transparent;
+
+    final platesWeight = (weight - barWeight).clamp(0.0, double.infinity);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
@@ -1075,7 +1107,7 @@ class _MatrixRow extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(6),
         border: isHighlighted
-            ? Border.all(color: IronMindTheme.green.withOpacity(0.35))
+            ? Border.all(color: IronMindTheme.green.withValues(alpha: 0.35))
             : null,
       ),
       child: Row(children: [
@@ -1089,11 +1121,28 @@ class _MatrixRow extends StatelessWidget {
         ),
         Expanded(
           flex: 3,
-          child: Text(pct == 1.0 ? 'Your PR' : '${_fmt(weight)} lbs',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.dmMono(
-              color: IronMindTheme.textPrimary, fontSize: 12,
-              fontWeight: FontWeight.w600)),
+          child: pct == 1.0
+              ? Text('Your PR',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.dmMono(
+                    color: IronMindTheme.textPrimary, fontSize: 12,
+                    fontWeight: FontWeight.w600))
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${_fmt(weight)} lb',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.dmMono(
+                        color: IronMindTheme.textPrimary, fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+                    if (showPlates)
+                      Text('${_fmt(platesWeight)} plates',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.dmMono(
+                          color: IronMindTheme.text3, fontSize: 9)),
+                  ],
+                ),
         ),
         Expanded(
           flex: 2,
@@ -1122,6 +1171,218 @@ class _MatrixRow extends StatelessWidget {
             ],
           ),
         ),
+      ]),
+    );
+  }
+}
+
+// ── Bar Selector ──────────────────────────────────────────────────────────────
+
+class _BarSelector extends StatelessWidget {
+  final BarType? selected;
+  final ValueChanged<BarType?> onChanged;
+  const _BarSelector({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('BAR TYPE',
+          style: GoogleFonts.dmMono(
+            color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1.5)),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _BarChip(
+                label: 'Stiff Bar',
+                sublabel: '45 lb',
+                isSelected: selected == null,
+                onTap: () => onChanged(null),
+              ),
+              ...BarType.values.map((t) {
+                final spec = barSpecFor(t);
+                return _BarChip(
+                  label: spec.shortName,
+                  sublabel: '${spec.weightLb.toInt()} lb',
+                  isSelected: selected == t,
+                  onTap: () => onChanged(t),
+                );
+              }),
+            ],
+          ),
+        ),
+        if (selected != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: IronMindTheme.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: IronMindTheme.border2),
+            ),
+            child: Text(
+              barSpecFor(selected!).benefit,
+              style: GoogleFonts.dmSans(
+                color: IronMindTheme.text2, fontSize: 11, height: 1.4),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _BarChip extends StatelessWidget {
+  final String label;
+  final String sublabel;
+  final bool isSelected;
+  final VoidCallback onTap;
+  const _BarChip({
+    required this.label, required this.sublabel,
+    required this.isSelected, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? IronMindTheme.accent.withValues(alpha: 0.12)
+              : IronMindTheme.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected
+                ? IronMindTheme.accent
+                : IronMindTheme.border2,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(label,
+              style: GoogleFonts.dmSans(
+                color: isSelected
+                    ? IronMindTheme.accent
+                    : IronMindTheme.text2,
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500)),
+            Text(sublabel,
+              style: GoogleFonts.dmMono(
+                color: IronMindTheme.text3, fontSize: 9)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── RPE Reference Chart ───────────────────────────────────────────────────────
+
+class _RpeChart extends StatelessWidget {
+  final double est1rm;
+  const _RpeChart({required this.est1rm});
+
+  // Tuchscherer RPE chart: [reps][rpe index 6..10] → % of 1RM
+  static const _rpeData = <int, List<double>>{
+    1:  [0.893, 0.917, 0.940, 0.960, 1.000],
+    2:  [0.863, 0.887, 0.910, 0.930, 0.970],
+    3:  [0.833, 0.857, 0.880, 0.900, 0.940],
+    4:  [0.803, 0.827, 0.850, 0.870, 0.910],
+    5:  [0.773, 0.797, 0.820, 0.840, 0.880],
+    6:  [0.743, 0.767, 0.790, 0.810, 0.850],
+    8:  [0.693, 0.717, 0.740, 0.760, 0.800],
+    10: [0.643, 0.667, 0.690, 0.710, 0.750],
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: IronMindTheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: IronMindTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('RPE → LOAD REFERENCE',
+            style: GoogleFonts.dmMono(
+              color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1.5)),
+          const SizedBox(height: 4),
+          Text(
+            'Find your target reps × RPE to get the corresponding % and load.',
+            style: GoogleFonts.dmSans(
+              color: IronMindTheme.text3, fontSize: 10, height: 1.4)),
+          const SizedBox(height: 12),
+          // Header row
+          Row(children: [
+            SizedBox(width: 36,
+              child: Text('REPS', style: GoogleFonts.dmMono(
+                color: IronMindTheme.text3, fontSize: 8, letterSpacing: 0.8))),
+            ...['RPE 6','RPE 7','RPE 8','RPE 9','RPE 10'].map((h) =>
+              Expanded(child: Text(h, textAlign: TextAlign.center,
+                style: GoogleFonts.dmMono(
+                  color: IronMindTheme.text3, fontSize: 7, letterSpacing: 0.5)))),
+          ]),
+          const SizedBox(height: 4),
+          const Divider(height: 1, color: IronMindTheme.border),
+          const SizedBox(height: 4),
+          ..._rpeData.entries.map((e) => _RpeRow(
+            reps: e.key,
+            pcts: e.value,
+            est1rm: est1rm,
+          )),
+        ],
+      ),
+    );
+  }
+}
+
+class _RpeRow extends StatelessWidget {
+  final int reps;
+  final List<double> pcts;
+  final double est1rm;
+  const _RpeRow({required this.reps, required this.pcts, required this.est1rm});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(children: [
+        SizedBox(
+          width: 36,
+          child: Text('$reps',
+            style: GoogleFonts.dmMono(
+              color: IronMindTheme.text2, fontSize: 11,
+              fontWeight: FontWeight.w600)),
+        ),
+        ...pcts.map((pct) {
+          final load = _roundToPlate(est1rm * pct);
+          return Expanded(
+            child: Column(
+              children: [
+                Text('${(pct * 100).round()}%',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.dmMono(
+                    color: IronMindTheme.accent, fontSize: 9)),
+                Text('${load.toInt()}',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.dmMono(
+                    color: IronMindTheme.textPrimary, fontSize: 10,
+                    fontWeight: FontWeight.w600)),
+              ],
+            ),
+          );
+        }),
       ]),
     );
   }
