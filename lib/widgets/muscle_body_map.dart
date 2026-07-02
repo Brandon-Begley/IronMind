@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../screens/workout_summary_screen.dart';
-import '../theme.dart';
+import '../core/theme/ironmind_theme.dart';
 
 // ── Muscle → set-count mapping ────────────────────────────────────────────────
 

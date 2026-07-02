@@ -3,8 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../services/api_service.dart';
 import '../services/health_service.dart';
-import '../theme.dart';
-import '../widgets/common.dart';
+import '../core/theme/ironmind_theme.dart';
+import '../shared/widgets/common.dart';
 import '../widgets/powerlifting_total_card.dart';
 import 'pr_screen.dart';
 

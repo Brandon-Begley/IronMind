@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../theme.dart';
+import '../core/theme/ironmind_theme.dart';
 import '../widgets/muscle_body_map.dart';
 
 // ── Plain data models (no widget state, safe to pass across screens) ──────────

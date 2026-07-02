@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
-import '../theme.dart';
+import '../core/theme/ironmind_theme.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final Future<void> Function() onComplete;

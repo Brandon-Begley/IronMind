@@ -12,7 +12,7 @@ import 'screens/workout_screen.dart';
 import 'services/auth_service.dart';
 import 'services/health_service.dart';
 import 'services/supabase_service.dart';
-import 'theme.dart';
+import 'core/theme/ironmind_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -2,41 +2,64 @@
 
 Built by Iron Foundry
 
-IronMind is an AI-powered all-in-one fitness platform focused on helping people build consistency in both training and daily habits.
+IronMind is an AI-powered training and discipline app focused on workouts, consistency, progression, and mental toughness.
 
-## Vision
+It helps users plan training, log workouts, review progress, stay disciplined, and use AI coaching to train more intelligently.
 
-Most fitness apps focus on tracking. IronMind focuses on discipline.
+## What IronMind Is
 
-The goal is to give users a simple system they can rely on every day — train, track, and stay consistent. No distractions. No unnecessary features.
+IronMind is built around a focused training loop:
 
-## Features
+1. Set goals and training preferences.
+2. Plan or generate a workout.
+3. Train and log the session.
+4. Review progress and history.
+5. Adjust intelligently and stay consistent.
 
-- **Workout** — Log training sessions, track sets/reps/weight, generate AI-built workouts tailored to your profile, and track personal records
-- **Food Log** — Log meals, track daily calories and macros, manage nutrition targets
-- **Dashboard** — See your progress at a glance — recent workouts, strength trends, and training summary
-- **Wellness** — Log daily check-ins (sleep, mood, recovery), track body weight and measurements, build habits, and connect Apple Health / Health Connect
-- **Profile** — Manage your lifter profile, strength goals, training preferences, profile photo, and app settings
+## What IronMind Is Not
 
-## Brand
+IronMind is not currently trying to be a full nutrition tracker, meal logger, barcode scanner, meal database, or generic wellness app.
 
-IronMind is part of Iron Foundry — built on the idea of forging yourself through pressure, consistency, and discipline.
+Nutrition logging was removed from the current MVP direction because it made the app too broad and diluted the training identity.
 
----
+## Current Core Features
+
+- Workout planning
+- Workout logging
+- Exercise history
+- Progress tracking
+- AI workout and coaching support
+- Wellness/readiness check-ins that support training decisions
+- Profile, goals, equipment, and training preferences
+
+## Current Project Status
+
+The project is being cleaned up and restructured.
+
+- Official source of truth: this Flutter app directory on branch `V.06.03`.
+- Duplicate local app versions are being consolidated.
+- A stale duplicate copy has been archived locally under `Documents/IronMind-archive/` and marked deprecated in its old workspace.
+- New development should happen only in the official app root.
+
+## Roadmap
+
+1. Codebase cleanup
+2. Architecture refactor
+3. Workout MVP
+4. AI coaching
+5. Progression tracking
+6. Wellness/readiness support
+7. Polish and release prep
 
 ## Tech Stack
 
-- **Flutter** `3.41.x` / **Dart** `3.11.x`
-- **Supabase** — Auth, database, and file storage
-- **OpenAI** — AI workout generation
-- **Apple Health / Health Connect** — Wellness data sync
-- **Codemagic** — CI/CD
-
----
+- Flutter and Dart
+- Supabase for auth, database, and file storage
+- AI workout/coaching integrations
+- Apple Health / Health Connect for training-relevant readiness data
+- Codemagic for CI/CD
 
 ## Local Setup
-
-**Requirements:** Flutter `3.41.x` or newer, Dart `3.11.x` or newer.
 
 Install dependencies:
 
@@ -60,38 +83,39 @@ Chrome preview:
 flutter run -d chrome
 ```
 
-Local helper script (uses bundled SDK):
+Local helper script:
 
 ```powershell
 .\run_chrome.ps1
 ```
 
-## Build & Checks
+## Build and Checks
 
 ```bash
-# Web build
-flutter build web
-
-# Static analysis
 flutter analyze
+flutter build web
 ```
-
----
 
 ## Project Structure
 
-```
+The app is moving toward a feature-based architecture:
+
+```text
 lib/
-  config/         API keys and Supabase config
-  models/         Data models
-  screens/        All app screens
-  services/       API, auth, health, local storage
-  widgets/        Shared UI components
-  theme.dart      Colors and typography
-  main.dart       App entry point
+  app/             App bootstrap, shell, routing, navigation
+  core/            Theme, config, storage, platform integrations
+  features/        Training, progress, discipline, readiness, AI coach, auth, profile
+  shared/          Reusable UI components and cross-feature helpers
 ```
 
----
+Current cleanup has started with:
+
+```text
+lib/core/theme/ironmind_theme.dart
+lib/shared/widgets/common.dart
+```
+
+Feature screens and services are still being migrated gradually to preserve functionality.
 
 ## Author
 

@@ -7,8 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_service.dart';
-import '../theme.dart';
-import '../widgets/common.dart';
+import '../core/theme/ironmind_theme.dart';
+import '../shared/widgets/common.dart';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 

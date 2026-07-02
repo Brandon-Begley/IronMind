@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../theme.dart';
+import '../core/theme/ironmind_theme.dart';
 import '../services/supabase_service.dart';
 
 class AuthTestScreen extends StatefulWidget {

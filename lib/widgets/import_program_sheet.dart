@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_service.dart';
 import '../services/program_import_service.dart';
-import '../theme.dart';
+import '../core/theme/ironmind_theme.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
