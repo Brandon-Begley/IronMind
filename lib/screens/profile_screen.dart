@@ -8,8 +8,8 @@ import 'package:path_provider/path_provider.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/health_service.dart';
-import '../theme.dart';
-import '../widgets/common.dart';
+import '../core/theme/ironmind_theme.dart';
+import '../shared/widgets/common.dart';
 
 class ProfileScreen extends StatefulWidget {
   final Future<void> Function() onSignOut;

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../theme.dart';
+import '../../core/theme/ironmind_theme.dart';
 
 // ── IronMind Top Bar (shown on every screen) ──────────────────────────────────
 class IronMindAppBar extends StatelessWidget implements PreferredSizeWidget {
