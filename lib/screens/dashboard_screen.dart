@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/health_service.dart';
 import '../core/theme/ironmind_theme.dart';
 import '../shared/widgets/common.dart';
+import '../widgets/load_barbell.dart';
 import '../widgets/powerlifting_total_card.dart';
 import 'pr_screen.dart';
 
@@ -68,14 +69,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ApiService.getWorkoutLoggedDates(),
       ]);
 
-      _logs           = results[0] as List<Map<String, dynamic>>;
-      _prs            = results[1] as List<Map<String, dynamic>>;
-      _wellness       = results[2] as Map<String, dynamic>?;
-      _profile        = results[3] as Map<String, dynamic>;
-      _goals          = results[4] as Map<String, dynamic>;
+      _logs = results[0] as List<Map<String, dynamic>>;
+      _prs = results[1] as List<Map<String, dynamic>>;
+      _wellness = results[2] as Map<String, dynamic>?;
+      _profile = results[3] as Map<String, dynamic>;
+      _goals = results[4] as Map<String, dynamic>;
       _bodyweightLogs = results[5] as List<Map<String, dynamic>>;
       final checkInDates = results[6] as Set<String>;
-      final habits       = results[7] as List<Map<String, dynamic>>;
+      final habits = results[7] as List<Map<String, dynamic>>;
       final workoutDates = results[8] as Set<String>;
 
       _calcMetrics();
@@ -86,7 +87,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Load health data after the main paint so it doesn't block the screen
     if (HealthService.instance.isConnected) {
       final steps = await HealthService.instance.getTodaySteps();
-      final cals  = await HealthService.instance.getTodayActiveCalories();
+      final cals = await HealthService.instance.getTodayActiveCalories();
       if (mounted) {
         setState(() {
           _healthSteps = steps;
@@ -105,7 +106,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return !date.isBefore(weekStart.subtract(const Duration(days: 1)));
     }).toList();
     _weekSessions = weekLogs.length;
-    _weekVolume   = weekLogs.fold(0, (s, l) => s + _logVolume(l));
+    _weekVolume = weekLogs.fold(0, (s, l) => s + _logVolume(l));
   }
 
   Future<void> _calcConsistency(
@@ -113,10 +114,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     List<Map<String, dynamic>> habits,
     Set<String> workoutDates,
   ) async {
-    final now      = DateTime.now();
+    final now = DateTime.now();
     final todayStr = _dateStr(now);
     final weekStart = now.subtract(Duration(days: now.weekday - 1));
-    final week7 = List.generate(7, (i) => _dateStr(weekStart.add(Duration(days: i))));
+    final week7 = List.generate(
+      7,
+      (i) => _dateStr(weekStart.add(Duration(days: i))),
+    );
 
     // X/7 counts
     _workoutCount = week7.where((d) => workoutDates.contains(d)).length;
@@ -124,7 +128,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final allHabitDays = <String>{};
     for (final h in habits) {
-      final completed = await ApiService.getHabitCompletedDates(h['id'] as String);
+      final completed = await ApiService.getHabitCompletedDates(
+        h['id'] as String,
+      );
       allHabitDays.addAll(completed);
     }
     _habitCount = week7.where((d) => allHabitDays.contains(d)).length;
@@ -153,10 +159,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   double _logVolume(Map<String, dynamic> log) {
     final exercises = log['exercises'] as List? ?? [];
-    return exercises.fold(0.0, (s, e) =>
-      s + ((e['weight'] ?? 0) as num).toDouble() *
-          ((e['sets'] ?? 1) as num).toDouble() *
-          ((e['reps'] ?? 1) as num).toDouble());
+    return exercises.fold(
+      0.0,
+      (s, e) =>
+          s +
+          ((e['weight'] ?? 0) as num).toDouble() *
+              ((e['sets'] ?? 1) as num).toDouble() *
+              ((e['reps'] ?? 1) as num).toDouble(),
+    );
   }
 
   String _formatVol(double value) {
@@ -180,8 +190,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (_bodyweightLogs.isNotEmpty) {
       final sorted = [..._bodyweightLogs]
         ..sort((a, b) {
-          final aD = DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(1970);
-          final bD = DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(1970);
+          final aD =
+              DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(1970);
+          final bD =
+              DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(1970);
           return aD.compareTo(bD);
         });
       return _toDouble(sorted.last['weight']);
@@ -236,7 +248,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: IronMindTheme.accent))
+          ? const Center(
+              child: CircularProgressIndicator(color: IronMindTheme.accent),
+            )
           : RefreshIndicator(
               color: IronMindTheme.accent,
               backgroundColor: IronMindTheme.surface2,
@@ -247,11 +261,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
                     // ── 1. Date header ─────────────────────────────────────
                     _DateHeader(),
                     if (HealthService.instance.isConnected &&
-                        (_healthSteps != null || _healthActiveCalories != null)) ...[
+                        (_healthSteps != null ||
+                            _healthActiveCalories != null)) ...[
                       const SizedBox(height: 12),
                       _HealthSummaryRow(
                         steps: _healthSteps,
@@ -264,13 +278,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SectionHeader(title: 'This Week'),
                     const SizedBox(height: 10),
                     _ThisWeekCard(
-                      sessions:     _weekSessions,
-                      volume:       _weekVolume,
-                      streak:       _currentStreak,
-                      formatVol:    _formatVol,
+                      sessions: _weekSessions,
+                      volume: _weekVolume,
+                      streak: _currentStreak,
+                      formatVol: _formatVol,
                       workoutCount: _workoutCount,
                       checkInCount: _checkInCount,
-                      habitCount:   _habitCount,
+                      habitCount: _habitCount,
                     ),
                     const SizedBox(height: 18),
 
@@ -282,11 +296,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     // ── 4. Powerlifting Total ──────────────────────────────
                     PowerliftingTotalCompact(
-                      squat:    _currentLift('squat',    'currentSquat'),
-                      bench:    _currentLift('bench',    'currentBench'),
+                      squat: _currentLift('squat', 'currentSquat'),
+                      bench: _currentLift('bench', 'currentBench'),
                       deadlift: _currentLift('deadlift', 'currentDeadlift'),
-                      onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const PRScreen())),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const PRScreen()),
+                      ),
                     ),
                     const SizedBox(height: 18),
 
@@ -294,15 +310,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SectionHeader(title: 'Strength Progress'),
                     const SizedBox(height: 10),
                     IronCard(
-                      child: Column(children: [
-                        _StrengthProgressRow(label: 'Squat',    current: _currentLift('squat', 'currentSquat'),       goal: _goalLift('squat'),    color: IronMindTheme.accent),
-                        const SizedBox(height: 12),
-                        _StrengthProgressRow(label: 'Bench',    current: _currentLift('bench', 'currentBench'),       goal: _goalLift('bench'),    color: IronMindTheme.green),
-                        const SizedBox(height: 12),
-                        _StrengthProgressRow(label: 'Deadlift', current: _currentLift('deadlift', 'currentDeadlift'), goal: _goalLift('deadlift'), color: IronMindTheme.blue),
-                        const SizedBox(height: 12),
-                        _StrengthProgressRow(label: 'OHP',      current: _currentLift('ohp', 'currentOhp'),           goal: _goalLift('ohp'),      color: IronMindTheme.orange),
-                      ]),
+                      child: Column(
+                        children: [
+                          _StrengthProgressRow(
+                            label: 'Squat',
+                            current: _currentLift('squat', 'currentSquat'),
+                            goal: _goalLift('squat'),
+                            color: IronMindTheme.accent,
+                          ),
+                          const SizedBox(height: 12),
+                          _StrengthProgressRow(
+                            label: 'Bench',
+                            current: _currentLift('bench', 'currentBench'),
+                            goal: _goalLift('bench'),
+                            color: IronMindTheme.green,
+                          ),
+                          const SizedBox(height: 12),
+                          _StrengthProgressRow(
+                            label: 'Deadlift',
+                            current: _currentLift(
+                              'deadlift',
+                              'currentDeadlift',
+                            ),
+                            goal: _goalLift('deadlift'),
+                            color: IronMindTheme.blue,
+                          ),
+                          const SizedBox(height: 12),
+                          _StrengthProgressRow(
+                            label: 'OHP',
+                            current: _currentLift('ohp', 'currentOhp'),
+                            goal: _goalLift('ohp'),
+                            color: IronMindTheme.orange,
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 18),
 
@@ -311,47 +352,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       SectionHeader(
                         title: 'Top Records',
                         trailing: GestureDetector(
-                          onTap: () => Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => const PRScreen())),
-                          child: Text('VIEW ALL',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const PRScreen()),
+                          ),
+                          child: Text(
+                            'VIEW ALL',
                             style: GoogleFonts.dmMono(
                               color: IronMindTheme.accent,
-                              fontSize: 10, letterSpacing: 1)),
+                              fontSize: 10,
+                              letterSpacing: 1,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 10),
                       IronCard(
                         padding: EdgeInsets.zero,
                         child: Column(
-                          children: _prs.take(4).toList().asMap().entries.map((entry) {
-                            final pr     = entry.value;
-                            final isLast = entry.key == (_prs.take(4).length - 1);
+                          children: _prs.take(4).toList().asMap().entries.map((
+                            entry,
+                          ) {
+                            final pr = entry.value;
+                            final isLast =
+                                entry.key == (_prs.take(4).length - 1);
                             return GestureDetector(
-                              onTap: () => Navigator.push(context,
-                                MaterialPageRoute(builder: (_) => const PRScreen())),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                                decoration: BoxDecoration(
-                                  border: isLast ? null : const Border(
-                                    bottom: BorderSide(color: IronMindTheme.border)),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const PRScreen(),
                                 ),
-                                child: Row(children: [
-                                  Expanded(
-                                    child: Text(pr['exercise'] ?? '',
-                                      style: GoogleFonts.dmSans(
-                                        color: IronMindTheme.textPrimary,
-                                        fontWeight: FontWeight.w500, fontSize: 13)),
-                                  ),
-                                  IronBadge('${pr['weight']}lb x ${pr['reps']}',
-                                    color: IronMindTheme.accent),
-                                  const SizedBox(width: 6),
-                                  if (pr['estimated_1rm'] != null)
-                                    IronBadge('~${pr['estimated_1rm']}lb',
-                                      color: IronMindTheme.green),
-                                  const SizedBox(width: 6),
-                                  const Icon(Icons.chevron_right,
-                                    size: 14, color: IronMindTheme.text3),
-                                ]),
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 11,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: isLast
+                                      ? null
+                                      : const Border(
+                                          bottom: BorderSide(
+                                            color: IronMindTheme.border,
+                                          ),
+                                        ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        pr['exercise'] ?? '',
+                                        style: GoogleFonts.dmSans(
+                                          color: IronMindTheme.textPrimary,
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    IronBadge(
+                                      '${pr['weight']}lb x ${pr['reps']}',
+                                      color: IronMindTheme.accent,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    if (pr['estimated_1rm'] != null)
+                                      IronBadge(
+                                        '~${pr['estimated_1rm']}lb',
+                                        color: IronMindTheme.green,
+                                      ),
+                                    const SizedBox(width: 6),
+                                    const Icon(
+                                      Icons.chevron_right,
+                                      size: 14,
+                                      color: IronMindTheme.text3,
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           }).toList(),
@@ -368,8 +443,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 // ── Date Header ───────────────────────────────────────────────────────────────
 class _DateHeader extends StatelessWidget {
-  static const _days   = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-  static const _months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  static const _days = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  static const _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -420,15 +516,35 @@ class _TodayCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: IronMindTheme.border),
       ),
-      child: Row(children: [
-        Expanded(child: _TodayChip(label: 'Workout',  done: workout, color: IronMindTheme.accent)),
-        const SizedBox(width: 8),
-        Expanded(child: _TodayChip(label: 'Check-In', done: checkIn, color: const Color(0xFF9B8AFB))),
-        if (mood != null) ...[
+      child: Row(
+        children: [
+          Expanded(
+            child: _TodayChip(
+              label: 'Workout',
+              done: workout,
+              color: IronMindTheme.accent,
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(child: _TodayChip(label: 'Mood $mood/10', done: true, color: IronMindTheme.blue)),
+          Expanded(
+            child: _TodayChip(
+              label: 'Check-In',
+              done: checkIn,
+              color: const Color(0xFF9B8AFB),
+            ),
+          ),
+          if (mood != null) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: _TodayChip(
+                label: 'Mood $mood/10',
+                done: true,
+                color: IronMindTheme.blue,
+              ),
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
@@ -438,7 +554,11 @@ class _TodayChip extends StatelessWidget {
   final bool done;
   final Color color;
 
-  const _TodayChip({required this.label, required this.done, required this.color});
+  const _TodayChip({
+    required this.label,
+    required this.done,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -451,25 +571,27 @@ class _TodayChip extends StatelessWidget {
           color: done ? color.withValues(alpha: 0.4) : IronMindTheme.border,
         ),
       ),
-      child: Column(children: [
-        Icon(
-          done ? Icons.check_circle : Icons.radio_button_unchecked,
-          color: done ? color : IronMindTheme.text3,
-          size: 16,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: GoogleFonts.dmSans(
+      child: Column(
+        children: [
+          Icon(
+            done ? Icons.check_circle : Icons.radio_button_unchecked,
             color: done ? color : IronMindTheme.text3,
-            fontSize: 9,
-            fontWeight: done ? FontWeight.w600 : FontWeight.normal,
+            size: 16,
           ),
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ]),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.dmSans(
+              color: done ? color : IronMindTheme.text3,
+              fontSize: 9,
+              fontWeight: done ? FontWeight.w600 : FontWeight.normal,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -503,29 +625,82 @@ class _ThisWeekCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: IronMindTheme.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Snap stats
-        IntrinsicHeight(
-          child: Row(children: [
-            Expanded(child: _SnapStat(label: 'Sessions', value: '$sessions',               sub: 'this week',   color: IronMindTheme.accent)),
-            VerticalDivider(color: IronMindTheme.border, width: 24, thickness: 1),
-            Expanded(child: _SnapStat(label: 'Volume',   value: '${formatVol(volume)} lbs', sub: 'lifted',      color: IronMindTheme.green)),
-            VerticalDivider(color: IronMindTheme.border, width: 24, thickness: 1),
-            Expanded(child: _SnapStat(label: 'Streak',   value: '${streak}d',               sub: 'current run', color: IronMindTheme.orange)),
-          ]),
-        ),
-        const SizedBox(height: 14),
-        Divider(color: IronMindTheme.border, height: 1),
-        const SizedBox(height: 14),
-        // Consistency rows
-        Text('CONSISTENCY', style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1.5)),
-        const SizedBox(height: 10),
-        _ConsistencyRow(label: 'Workouts',  count: workoutCount, color: IronMindTheme.accent),
-        const SizedBox(height: 8),
-        _ConsistencyRow(label: 'Check-Ins', count: checkInCount, color: const Color(0xFF9B8AFB)),
-        const SizedBox(height: 8),
-        _ConsistencyRow(label: 'Habits',    count: habitCount,   color: IronMindTheme.orange),
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Snap stats
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                  child: _SnapStat(
+                    label: 'Sessions',
+                    value: '$sessions',
+                    sub: 'this week',
+                    color: IronMindTheme.accent,
+                  ),
+                ),
+                VerticalDivider(
+                  color: IronMindTheme.border,
+                  width: 24,
+                  thickness: 1,
+                ),
+                Expanded(
+                  child: _SnapStat(
+                    label: 'Volume',
+                    value: '${formatVol(volume)} lbs',
+                    sub: 'lifted',
+                    color: IronMindTheme.green,
+                  ),
+                ),
+                VerticalDivider(
+                  color: IronMindTheme.border,
+                  width: 24,
+                  thickness: 1,
+                ),
+                Expanded(
+                  child: _SnapStat(
+                    label: 'Streak',
+                    value: '${streak}d',
+                    sub: 'current run',
+                    color: IronMindTheme.orange,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Divider(color: IronMindTheme.border, height: 1),
+          const SizedBox(height: 14),
+          // Consistency rows
+          Text(
+            'CONSISTENCY',
+            style: GoogleFonts.dmMono(
+              color: IronMindTheme.text3,
+              fontSize: 9,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _ConsistencyRow(
+            label: 'Workouts',
+            count: workoutCount,
+            color: IronMindTheme.accent,
+          ),
+          const SizedBox(height: 8),
+          _ConsistencyRow(
+            label: 'Check-Ins',
+            count: checkInCount,
+            color: const Color(0xFF9B8AFB),
+          ),
+          const SizedBox(height: 8),
+          _ConsistencyRow(
+            label: 'Habits',
+            count: habitCount,
+            color: IronMindTheme.orange,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -533,16 +708,38 @@ class _ThisWeekCard extends StatelessWidget {
 class _SnapStat extends StatelessWidget {
   final String label, value, sub;
   final Color color;
-  const _SnapStat({required this.label, required this.value, required this.sub, required this.color});
+  const _SnapStat({
+    required this.label,
+    required this.value,
+    required this.sub,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(label.toUpperCase(), style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1)),
+      Text(
+        label.toUpperCase(),
+        style: GoogleFonts.dmMono(
+          color: IronMindTheme.text3,
+          fontSize: 9,
+          letterSpacing: 1,
+        ),
+      ),
       const SizedBox(height: 4),
-      Text(value, style: GoogleFonts.bebasNeue(color: color, fontSize: 15, letterSpacing: 0.8)),
-      Text(sub, style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9)),
+      Text(
+        value,
+        style: GoogleFonts.bebasNeue(
+          color: color,
+          fontSize: 15,
+          letterSpacing: 0.8,
+        ),
+      ),
+      Text(
+        sub,
+        style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9),
+      ),
     ],
   );
 }
@@ -551,33 +748,46 @@ class _ConsistencyRow extends StatelessWidget {
   final String label;
   final int count;
   final Color color;
-  const _ConsistencyRow({required this.label, required this.count, required this.color});
+  const _ConsistencyRow({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     final pct = (count / 7).clamp(0.0, 1.0);
-    return Row(children: [
-      SizedBox(
-        width: 68,
-        child: Text(label, style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 10)),
-      ),
-      Expanded(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(99),
-          child: LinearProgressIndicator(
-            value: pct,
-            minHeight: 5,
-            backgroundColor: IronMindTheme.surface3,
-            valueColor: AlwaysStoppedAnimation(color),
+    return Row(
+      children: [
+        SizedBox(
+          width: 68,
+          child: Text(
+            label,
+            style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 10),
           ),
         ),
-      ),
-      const SizedBox(width: 10),
-      Text(
-        '$count/7',
-        style: GoogleFonts.bebasNeue(color: color, fontSize: 13, letterSpacing: 0.5),
-      ),
-    ]);
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 5,
+              backgroundColor: IronMindTheme.surface3,
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          '$count/7',
+          style: GoogleFonts.bebasNeue(
+            color: color,
+            fontSize: 13,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -599,43 +809,75 @@ class _StrengthProgressRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress = progressOverride ??
-        (goal > 0 ? (current / goal).clamp(0.0, 1.0) : 0.0);
+    final progress =
+        progressOverride ?? (goal > 0 ? (current / goal).clamp(0.0, 1.0) : 0.0);
     final pct = (progress * 100).round();
-    final currentLabel = current > 0 ? '${current.toStringAsFixed(0)} lbs' : '—';
-    final goalLabel = goal > 0 ? '${goal.toStringAsFixed(0)} lbs goal' : 'set a goal';
+    final currentLabel = current > 0
+        ? '${current.toStringAsFixed(0)} lbs'
+        : '—';
+    final goalLabel = goal > 0
+        ? '${goal.toStringAsFixed(0)} lbs goal'
+        : 'set a goal';
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Expanded(
-          child: Text(label, style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 15, letterSpacing: 1.2)),
-        ),
-        Text(currentLabel, style: GoogleFonts.dmMono(color: color, fontSize: 11)),
-        const SizedBox(width: 8),
-        Text(goalLabel, style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 10)),
-        if (goal > 0) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(4),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.bebasNeue(
+                  color: IronMindTheme.textPrimary,
+                  fontSize: 15,
+                  letterSpacing: 1.2,
+                ),
+              ),
             ),
-            child: Text('$pct%', style: GoogleFonts.dmMono(color: color, fontSize: 9, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ]),
-      const SizedBox(height: 8),
-      ClipRRect(
-        borderRadius: BorderRadius.circular(99),
-        child: LinearProgressIndicator(
-          value: progress,
-          minHeight: 7,
-          backgroundColor: IronMindTheme.border2,
-          valueColor: AlwaysStoppedAnimation<Color>(color),
+            Text(
+              currentLabel,
+              style: GoogleFonts.dmMono(color: color, fontSize: 11),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              goalLabel,
+              style: GoogleFonts.dmMono(
+                color: IronMindTheme.text3,
+                fontSize: 10,
+              ),
+            ),
+            if (goal > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '$pct%',
+                  style: GoogleFonts.dmMono(
+                    color: color,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
-      ),
-    ]);
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(99),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 7,
+            backgroundColor: IronMindTheme.border2,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -659,7 +901,11 @@ class _HealthSummaryRow extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  Icon(Icons.directions_walk, color: IronMindTheme.green, size: 16),
+                  Icon(
+                    Icons.directions_walk,
+                    color: IronMindTheme.green,
+                    size: 16,
+                  ),
                   const SizedBox(width: 6),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -674,7 +920,10 @@ class _HealthSummaryRow extends StatelessWidget {
                       ),
                       Text(
                         'Steps',
-                        style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 10),
+                        style: GoogleFonts.dmSans(
+                          color: IronMindTheme.text2,
+                          fontSize: 10,
+                        ),
                       ),
                     ],
                   ),
@@ -693,7 +942,11 @@ class _HealthSummaryRow extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  Icon(Icons.local_fire_department, color: IronMindTheme.orange, size: 16),
+                  Icon(
+                    Icons.local_fire_department,
+                    color: IronMindTheme.orange,
+                    size: 16,
+                  ),
                   const SizedBox(width: 6),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -708,7 +961,10 @@ class _HealthSummaryRow extends StatelessWidget {
                       ),
                       Text(
                         'Active',
-                        style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 10),
+                        style: GoogleFonts.dmSans(
+                          color: IronMindTheme.text2,
+                          fontSize: 10,
+                        ),
                       ),
                     ],
                   ),
@@ -725,21 +981,6 @@ class _HealthSummaryRow extends StatelessWidget {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 double _dashRound(double v, double step) => (v / step).round() * step;
-
-String _platesText(double total, double barW) {
-  var rem = (total - barW) / 2;
-  if (rem < 0) return 'Under bar weight';
-  if (rem == 0) return 'Bar only';
-  final parts = <String>[];
-  for (final p in [45.0, 35.0, 25.0, 10.0, 5.0, 2.5]) {
-    final n = (rem / p).floor();
-    if (n > 0) {
-      parts.add('$n × ${p == p.truncateToDouble() ? p.toInt() : p}');
-      rem -= n * p;
-    }
-  }
-  return parts.isEmpty ? 'Bar only' : parts.join('  +  ');
-}
 
 // ── Training Tools Row ────────────────────────────────────────────────────────
 
@@ -824,11 +1065,21 @@ class _ToolCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label,
+                  Text(
+                    label,
                     style: GoogleFonts.bebasNeue(
-                      color: IronMindTheme.textPrimary, fontSize: 14, letterSpacing: 1)),
-                  Text(sub,
-                    style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 10)),
+                      color: IronMindTheme.textPrimary,
+                      fontSize: 14,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  Text(
+                    sub,
+                    style: GoogleFonts.dmSans(
+                      color: IronMindTheme.text2,
+                      fontSize: 10,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -846,23 +1097,106 @@ class _SchemeData {
   final String label, category, note;
   final List<int> reps;
   final double? pct;
-  const _SchemeData(this.label, this.category, this.reps, {this.pct, this.note = ''});
+  const _SchemeData(
+    this.label,
+    this.category,
+    this.reps, {
+    this.pct,
+    this.note = '',
+  });
 }
 
 const _dashSchemes = [
-  _SchemeData('5×5',           'Strength',    [5,5,5,5,5],     pct: 0.80, note: 'Classic powerbuilding block'),
-  _SchemeData('5×3',           'Strength',    [3,3,3,3,3],     pct: 0.85, note: 'Heavy compound strength'),
-  _SchemeData('3×3',           'Strength',    [3,3,3],         pct: 0.90, note: 'Near-max effort triples'),
-  _SchemeData('4×6',           'Strength',    [6,6,6,6],       pct: 0.75, note: 'Strength-hypertrophy blend'),
-  _SchemeData('Wendler 5/3/1', 'Strength',    [5,3,1],                    note: 'Week-by-week intensity wave'),
-  _SchemeData('4×8',           'Hypertrophy', [8,8,8,8],       pct: 0.70, note: 'Standard hypertrophy work'),
-  _SchemeData('4×10',          'Hypertrophy', [10,10,10,10],   pct: 0.65, note: 'Volume accumulation'),
-  _SchemeData('3×12',          'Hypertrophy', [12,12,12],      pct: 0.60, note: 'Pump + muscle endurance'),
-  _SchemeData('5×8',           'Hypertrophy', [8,8,8,8,8],     pct: 0.68, note: 'High-volume hypertrophy'),
-  _SchemeData('4×2',           'Peaking',     [2,2,2,2],       pct: 0.92, note: 'Competition prep doubles'),
-  _SchemeData('5×2',           'Peaking',     [2,2,2,2,2],     pct: 0.90, note: 'Accumulate quality doubles'),
-  _SchemeData('3×1',           'Peaking',     [1,1,1],         pct: 0.97, note: 'Max attempt singles'),
-  _SchemeData('Wave 3-2-1',    'Peaking',     [3,2,1,3,2,1],              note: '87 / 92 / 97% across waves'),
+  _SchemeData(
+    '5×5',
+    'Strength',
+    [5, 5, 5, 5, 5],
+    pct: 0.80,
+    note: 'Classic powerbuilding block',
+  ),
+  _SchemeData(
+    '5×3',
+    'Strength',
+    [3, 3, 3, 3, 3],
+    pct: 0.85,
+    note: 'Heavy compound strength',
+  ),
+  _SchemeData(
+    '3×3',
+    'Strength',
+    [3, 3, 3],
+    pct: 0.90,
+    note: 'Near-max effort triples',
+  ),
+  _SchemeData(
+    '4×6',
+    'Strength',
+    [6, 6, 6, 6],
+    pct: 0.75,
+    note: 'Strength-hypertrophy blend',
+  ),
+  _SchemeData('Wendler 5/3/1', 'Strength', [
+    5,
+    3,
+    1,
+  ], note: 'Week-by-week intensity wave'),
+  _SchemeData(
+    '4×8',
+    'Hypertrophy',
+    [8, 8, 8, 8],
+    pct: 0.70,
+    note: 'Standard hypertrophy work',
+  ),
+  _SchemeData(
+    '4×10',
+    'Hypertrophy',
+    [10, 10, 10, 10],
+    pct: 0.65,
+    note: 'Volume accumulation',
+  ),
+  _SchemeData(
+    '3×12',
+    'Hypertrophy',
+    [12, 12, 12],
+    pct: 0.60,
+    note: 'Pump + muscle endurance',
+  ),
+  _SchemeData(
+    '5×8',
+    'Hypertrophy',
+    [8, 8, 8, 8, 8],
+    pct: 0.68,
+    note: 'High-volume hypertrophy',
+  ),
+  _SchemeData(
+    '4×2',
+    'Peaking',
+    [2, 2, 2, 2],
+    pct: 0.92,
+    note: 'Competition prep doubles',
+  ),
+  _SchemeData(
+    '5×2',
+    'Peaking',
+    [2, 2, 2, 2, 2],
+    pct: 0.90,
+    note: 'Accumulate quality doubles',
+  ),
+  _SchemeData(
+    '3×1',
+    'Peaking',
+    [1, 1, 1],
+    pct: 0.97,
+    note: 'Max attempt singles',
+  ),
+  _SchemeData('Wave 3-2-1', 'Peaking', [
+    3,
+    2,
+    1,
+    3,
+    2,
+    1,
+  ], note: '87 / 92 / 97% across waves'),
 ];
 
 class _DashSchemeSheet extends StatefulWidget {
@@ -905,29 +1239,41 @@ class _DashSchemeSheetState extends State<_DashSchemeSheet>
           children: [
             const SizedBox(height: 10),
             Container(
-              width: 36, height: 4,
+              width: 36,
+              height: 4,
               decoration: BoxDecoration(
-                color: IronMindTheme.border, borderRadius: BorderRadius.circular(2)),
+                color: IronMindTheme.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
             const SizedBox(height: 14),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Set Scheme Reference',
+                child: Text(
+                  'Set Scheme Reference',
                   style: GoogleFonts.bebasNeue(
-                    color: IronMindTheme.textPrimary, fontSize: 24, letterSpacing: 1.5)),
+                    color: IronMindTheme.textPrimary,
+                    fontSize: 24,
+                    letterSpacing: 1.5,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 12),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: IronMindTheme.surface2, borderRadius: BorderRadius.circular(10)),
+                color: IronMindTheme.surface2,
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: TabBar(
                 controller: _tc,
                 indicator: BoxDecoration(
-                  color: IronMindTheme.green, borderRadius: BorderRadius.circular(8)),
+                  color: IronMindTheme.green,
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 indicatorSize: TabBarIndicatorSize.tab,
                 labelColor: IronMindTheme.bg,
                 unselectedLabelColor: IronMindTheme.text2,
@@ -984,30 +1330,52 @@ class _DashSchemeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(scheme.label,
+                Text(
+                  scheme.label,
                   style: GoogleFonts.bebasNeue(
-                    color: IronMindTheme.textPrimary, fontSize: 17, letterSpacing: 1)),
+                    color: IronMindTheme.textPrimary,
+                    fontSize: 17,
+                    letterSpacing: 1,
+                  ),
+                ),
                 const SizedBox(height: 6),
                 Wrap(
-                  spacing: 4, runSpacing: 4,
-                  children: scheme.reps.map((r) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: IronMindTheme.green.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: IronMindTheme.green.withValues(alpha: 0.3)),
-                    ),
-                    child: Text('$r',
-                      style: GoogleFonts.dmMono(
-                        color: IronMindTheme.green, fontSize: 10)),
-                  )).toList(),
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: scheme.reps
+                      .map(
+                        (r) => Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: IronMindTheme.green.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: IronMindTheme.green.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Text(
+                            '$r',
+                            style: GoogleFonts.dmMono(
+                              color: IronMindTheme.green,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
                 ),
                 if (scheme.note.isNotEmpty) ...[
                   const SizedBox(height: 6),
-                  Text(scheme.note,
+                  Text(
+                    scheme.note,
                     style: GoogleFonts.dmSans(
-                      color: IronMindTheme.text3, fontSize: 11)),
+                      color: IronMindTheme.text3,
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -1020,11 +1388,16 @@ class _DashSchemeCard extends StatelessWidget {
                 color: IronMindTheme.accent.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: IronMindTheme.accent.withValues(alpha: 0.3)),
+                  color: IronMindTheme.accent.withValues(alpha: 0.3),
+                ),
               ),
-              child: Text('${(scheme.pct! * 100).round()}%',
+              child: Text(
+                '${(scheme.pct! * 100).round()}%',
                 style: GoogleFonts.bebasNeue(
-                  color: IronMindTheme.accent, fontSize: 18)),
+                  color: IronMindTheme.accent,
+                  fontSize: 18,
+                ),
+              ),
             ),
           ],
         ],
@@ -1048,10 +1421,16 @@ class _DashLoadCalcSheetState extends State<_DashLoadCalcSheet> {
   final _maxCtrl = TextEditingController();
   String? _selectedPr;
 
-  double get _barW   => _bar != null ? barSpecFor(_bar!).weightLb : 0;
-  double get _e1rm   => double.tryParse(_maxCtrl.text) ?? 0;
+  double get _barW => _bar != null ? barSpecFor(_bar!).weightLb : 45;
+  double get _e1rm => double.tryParse(_maxCtrl.text) ?? 0;
   double get _target => _dashRound(_e1rm * _pct, 2.5);
-  bool   get _valid  => _e1rm > 0;
+  bool get _valid => _e1rm > 0;
+
+  void _adjustTarget(double delta) {
+    if (!_valid) return;
+    final next = (_target + delta).clamp(_barW, _e1rm * 1.05);
+    setState(() => _pct = (next / _e1rm).clamp(0.50, 1.05));
+  }
 
   @override
   void dispose() {
@@ -1071,10 +1450,9 @@ class _DashLoadCalcSheetState extends State<_DashLoadCalcSheet> {
       _maxCtrl.text = e1rm.toStringAsFixed(0);
     } else {
       final w = (pr['weight'] as num?)?.toDouble() ?? 0;
-      final r = (pr['reps']   as num?)?.toInt()    ?? 1;
+      final r = (pr['reps'] as num?)?.toInt() ?? 1;
       if (w > 0) {
-        _maxCtrl.text =
-          _dashRound(w * (1 + r / 30.0), 2.5).toStringAsFixed(0);
+        _maxCtrl.text = _dashRound(w * (1 + r / 30.0), 2.5).toStringAsFixed(0);
       }
     }
     setState(() => _selectedPr = label);
@@ -1095,29 +1473,43 @@ class _DashLoadCalcSheetState extends State<_DashLoadCalcSheet> {
           children: [
             const SizedBox(height: 10),
             Container(
-              width: 36, height: 4,
+              width: 36,
+              height: 4,
               decoration: BoxDecoration(
-                color: IronMindTheme.border, borderRadius: BorderRadius.circular(2)),
+                color: IronMindTheme.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
             Expanded(
               child: ListView(
                 controller: ctrl,
                 padding: EdgeInsets.fromLTRB(
-                  20, 14, 20,
-                  MediaQuery.of(context).viewInsets.bottom + 32),
+                  20,
+                  14,
+                  20,
+                  MediaQuery.of(context).viewInsets.bottom + 32,
+                ),
                 children: [
-                  Text('Load Calculator',
+                  Text(
+                    'Load Calculator',
                     style: GoogleFonts.bebasNeue(
                       color: IronMindTheme.textPrimary,
-                      fontSize: 24, letterSpacing: 1.5)),
+                      fontSize: 24,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
                   const SizedBox(height: 20),
 
                   // Quick-fill from PRs
                   if (widget.prs.isNotEmpty) ...[
-                    Text('QUICK FILL FROM PR',
+                    Text(
+                      'QUICK FILL FROM PR',
                       style: GoogleFonts.dmMono(
                         color: IronMindTheme.text3,
-                        fontSize: 9, letterSpacing: 1.2)),
+                        fontSize: 9,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1130,12 +1522,18 @@ class _DashLoadCalcSheetState extends State<_DashLoadCalcSheet> {
                         child: DropdownButton<String>(
                           isExpanded: true,
                           value: _selectedPr,
-                          hint: Text('Pick an exercise',
+                          hint: Text(
+                            'Pick an exercise',
                             style: GoogleFonts.dmSans(
-                              color: IronMindTheme.text3, fontSize: 13)),
+                              color: IronMindTheme.text3,
+                              fontSize: 13,
+                            ),
+                          ),
                           dropdownColor: IronMindTheme.surface2,
                           style: GoogleFonts.dmSans(
-                            color: IronMindTheme.textPrimary, fontSize: 13),
+                            color: IronMindTheme.textPrimary,
+                            fontSize: 13,
+                          ),
                           items: widget.prs.map((pr) {
                             final ex = pr['exercise']?.toString() ?? '';
                             return DropdownMenuItem(value: ex, child: Text(ex));
@@ -1148,79 +1546,104 @@ class _DashLoadCalcSheetState extends State<_DashLoadCalcSheet> {
                   ],
 
                   // 1RM input
-                  Text('ESTIMATED 1RM (LB)',
+                  Text(
+                    'ESTIMATED 1RM (LB)',
                     style: GoogleFonts.dmMono(
                       color: IronMindTheme.text3,
-                      fontSize: 9, letterSpacing: 1.2)),
+                      fontSize: 9,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _maxCtrl,
-                    keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     style: GoogleFonts.bebasNeue(
-                      color: IronMindTheme.textPrimary, fontSize: 26),
+                      color: IronMindTheme.textPrimary,
+                      fontSize: 26,
+                    ),
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
                       hintText: '315',
                       hintStyle: GoogleFonts.bebasNeue(
-                        color: IronMindTheme.text3, fontSize: 26),
+                        color: IronMindTheme.text3,
+                        fontSize: 26,
+                      ),
                       suffixText: 'lb',
                       suffixStyle: GoogleFonts.dmMono(
-                        color: IronMindTheme.text3, fontSize: 12),
+                        color: IronMindTheme.text3,
+                        fontSize: 12,
+                      ),
                       enabledBorder: const UnderlineInputBorder(
-                        borderSide: BorderSide(color: IronMindTheme.border)),
+                        borderSide: BorderSide(color: IronMindTheme.border),
+                      ),
                       focusedBorder: const UnderlineInputBorder(
-                        borderSide: BorderSide(color: IronMindTheme.accent)),
+                        borderSide: BorderSide(color: IronMindTheme.accent),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
 
                   // Bar type
-                  Text('BAR TYPE',
+                  Text(
+                    'BAR TYPE',
                     style: GoogleFonts.dmMono(
                       color: IronMindTheme.text3,
-                      fontSize: 9, letterSpacing: 1.2)),
+                      fontSize: 9,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: BarType.values.map((t) {
                         final spec = barSpecFor(t);
-                        final sel  = _bar == t;
+                        final sel = _bar == t;
                         return GestureDetector(
                           onTap: () => setState(() => _bar = sel ? null : t),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 120),
                             margin: const EdgeInsets.only(right: 8),
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: sel
-                                ? IronMindTheme.accent.withValues(alpha: 0.15)
-                                : IronMindTheme.surface2,
+                                  ? IronMindTheme.accent.withValues(alpha: 0.15)
+                                  : IronMindTheme.surface2,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: sel
-                                  ? IronMindTheme.accent
-                                  : IronMindTheme.border,
+                                    ? IronMindTheme.accent
+                                    : IronMindTheme.border,
                                 width: sel ? 1.5 : 1,
                               ),
                             ),
                             child: Column(
                               children: [
-                                Text(spec.shortName,
+                                Text(
+                                  spec.shortName,
                                   style: GoogleFonts.dmSans(
                                     color: sel
-                                      ? IronMindTheme.accent
-                                      : IronMindTheme.text2,
+                                        ? IronMindTheme.accent
+                                        : IronMindTheme.text2,
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w600)),
-                                Text('${spec.weightLb.toInt()} lb',
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  '${spec.weightLb.toInt()} lb',
                                   style: GoogleFonts.dmMono(
                                     color: sel
-                                      ? IronMindTheme.accent
-                                      : IronMindTheme.text3,
-                                    fontSize: 9)),
+                                        ? IronMindTheme.accent
+                                        : IronMindTheme.text3,
+                                    fontSize: 9,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -1233,14 +1656,22 @@ class _DashLoadCalcSheetState extends State<_DashLoadCalcSheet> {
                   // Intensity slider
                   Row(
                     children: [
-                      Text('INTENSITY',
+                      Text(
+                        'INTENSITY',
                         style: GoogleFonts.dmMono(
                           color: IronMindTheme.text3,
-                          fontSize: 9, letterSpacing: 1.2)),
+                          fontSize: 9,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
                       const Spacer(),
-                      Text('${(_pct * 100).round()}% of 1RM',
+                      Text(
+                        '${(_pct * 100).round()}% of 1RM',
                         style: GoogleFonts.bebasNeue(
-                          color: IronMindTheme.accent, fontSize: 16)),
+                          color: IronMindTheme.accent,
+                          fontSize: 16,
+                        ),
+                      ),
                     ],
                   ),
                   SliderTheme(
@@ -1248,77 +1679,105 @@ class _DashLoadCalcSheetState extends State<_DashLoadCalcSheet> {
                       activeTrackColor: IronMindTheme.accent,
                       thumbColor: IronMindTheme.accent,
                       inactiveTrackColor: IronMindTheme.border,
-                      overlayColor:
-                        IronMindTheme.accent.withValues(alpha: 0.15),
+                      overlayColor: IronMindTheme.accent.withValues(
+                        alpha: 0.15,
+                      ),
                     ),
                     child: Slider(
                       value: _pct,
                       min: 0.50,
-                      max: 1.00,
-                      divisions: 20,
+                      max: 1.05,
+                      divisions: 22,
                       onChanged: (v) => setState(() => _pct = v),
                     ),
                   ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('50%',
+                      Text(
+                        '50%',
                         style: GoogleFonts.dmMono(
-                          color: IronMindTheme.text3, fontSize: 9)),
-                      Text('100%',
+                          color: IronMindTheme.text3,
+                          fontSize: 9,
+                        ),
+                      ),
+                      Text(
+                        '105%',
                         style: GoogleFonts.dmMono(
-                          color: IronMindTheme.text3, fontSize: 9)),
+                          color: IronMindTheme.text3,
+                          fontSize: 9,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
 
                   // Result
-                  if (_valid) Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: IronMindTheme.accent.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: IronMindTheme.accent.withValues(alpha: 0.3)),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(_target.toStringAsFixed(0),
-                              style: GoogleFonts.bebasNeue(
-                                color: IronMindTheme.accent,
-                                fontSize: 52, height: 1)),
-                            const SizedBox(width: 6),
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: Text('lb total',
-                                style: GoogleFonts.dmMono(
-                                  color: IronMindTheme.text2, fontSize: 13)),
-                            ),
-                          ],
+                  if (_valid)
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: IronMindTheme.accent.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: IronMindTheme.accent.withValues(alpha: 0.3),
                         ),
-                        const SizedBox(height: 8),
-                        if (_bar != null) ...[
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                _target.toStringAsFixed(0),
+                                style: GoogleFonts.bebasNeue(
+                                  color: IronMindTheme.accent,
+                                  fontSize: 52,
+                                  height: 1,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Text(
+                                  'lb total',
+                                  style: GoogleFonts.dmMono(
+                                    color: IronMindTheme.text2,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          LoadBarbell(
+                            totalWeight: _target,
+                            barWeight: _barW,
+                            color: IronMindTheme.accent,
+                          ),
+                          const SizedBox(height: 10),
                           Text(
-                            _platesText(_target, _barW),
+                            LoadBarbell.plateBreakdown(_target, _barW),
                             style: GoogleFonts.dmMono(
-                              color: IronMindTheme.textPrimary, fontSize: 12),
+                              color: IronMindTheme.textPrimary,
+                              fontSize: 12,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 4),
-                          Text('per side',
+                          Text(
+                            'per side',
                             style: GoogleFonts.dmSans(
-                              color: IronMindTheme.text3, fontSize: 10)),
-                        ] else
-                          Text('Select a bar to see plate breakdown',
-                            style: GoogleFonts.dmSans(
-                              color: IronMindTheme.text3, fontSize: 11)),
-                      ],
+                              color: IronMindTheme.text3,
+                              fontSize: 10,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          LoadPlateAdjuster(onChanged: _adjustTarget),
+                        ],
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

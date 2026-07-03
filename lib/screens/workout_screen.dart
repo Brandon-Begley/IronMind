@@ -9,15 +9,16 @@ import '../core/theme/ironmind_theme.dart';
 import '../widgets/muscle_body_map.dart' show computeMuscleSetMap;
 import '../shared/widgets/common.dart';
 import '../widgets/import_program_sheet.dart';
+import '../widgets/load_barbell.dart';
 import '../services/api_service.dart';
 import '../services/health_service.dart';
 import '../models/bar_type.dart';
 
-void _doShowImportSheet(BuildContext context, {required VoidCallback onRefresh}) {
-  showImportProgramSheet(
-    context,
-    onRoutinesSaved: onRefresh,
-  );
+void _doShowImportSheet(
+  BuildContext context, {
+  required VoidCallback onRefresh,
+}) {
+  showImportProgramSheet(context, onRoutinesSaved: onRefresh);
 }
 
 class WorkoutScreen extends StatefulWidget {
@@ -64,7 +65,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       _restExercise = exercise.trim();
     });
     _restTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) { t.cancel(); return; }
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
       if (_restSeconds <= 0) {
         t.cancel();
         setState(() => _resting = false);
@@ -214,7 +218,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       });
       return;
     }
-    _beginWorkout(exercises: names.map((n) => _ExerciseEntry(name: n)).toList());
+    _beginWorkout(
+      exercises: names.map((n) => _ExerciseEntry(name: n)).toList(),
+    );
   }
 
   void _openExerciseLibrary() {
@@ -224,7 +230,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.92,
-        child: ExerciseLibraryScreen(onAddMultipleToWorkout: _addExercisesFromLibrary),
+        child: ExerciseLibraryScreen(
+          onAddMultipleToWorkout: _addExercisesFromLibrary,
+        ),
       ),
     );
   }
@@ -445,9 +453,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   void _showImportProgramSheet() {
     // Import via the shared import widget — routines land in local storage
     // and refresh the tab via _routineRefreshTick.
-    _doShowImportSheet(context, onRefresh: () {
-      setState(() => _routineRefreshTick++);
-    });
+    _doShowImportSheet(
+      context,
+      onRefresh: () {
+        setState(() => _routineRefreshTick++);
+      },
+    );
   }
 
   List<String> _detectMuscleGroups(List<_ExerciseEntry> exercises) =>
@@ -458,57 +469,67 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     _stopRest();
 
     final now = DateTime.now();
-    final summaryExercises = _exercises.where((e) => e.name.isNotEmpty).toList();
-    final capturedElapsed  = _elapsed;
-    final capturedName     = _workoutName;
-    final muscleGroups     = _detectMuscleGroups(summaryExercises);
+    final summaryExercises = _exercises
+        .where((e) => e.name.isNotEmpty)
+        .toList();
+    final capturedElapsed = _elapsed;
+    final capturedName = _workoutName;
+    final muscleGroups = _detectMuscleGroups(summaryExercises);
 
     // Capture full set-by-set data before clearing state
-    final summaryExerciseList = summaryExercises.map((e) {
-      final completedSets = e.sets
-          .where((s) => s.done && s.reps > 0)
-          .map((s) => SummarySet(
-            weight: s.weight,
-            reps:   s.reps,
-            isPR:   s.prTracked,
-          ))
-          .toList();
-      return SummaryExercise(name: e.name, completedSets: completedSets);
-    }).where((e) => e.completedSets.isNotEmpty).toList();
+    final summaryExerciseList = summaryExercises
+        .map((e) {
+          final completedSets = e.sets
+              .where((s) => s.done && s.reps > 0)
+              .map(
+                (s) => SummarySet(
+                  weight: s.weight,
+                  reps: s.reps,
+                  isPR: s.prTracked,
+                ),
+              )
+              .toList();
+          return SummaryExercise(name: e.name, completedSets: completedSets);
+        })
+        .where((e) => e.completedSets.isNotEmpty)
+        .toList();
 
     final summaryData = WorkoutSummaryData(
-      name:           capturedName,
-      date:           now,
+      name: capturedName,
+      date: now,
       elapsedSeconds: capturedElapsed,
-      muscleGroups:   muscleGroups,
-      exercises:      summaryExerciseList,
-      muscleSetMap:   computeMuscleSetMap(summaryExerciseList),
+      muscleGroups: muscleGroups,
+      exercises: summaryExerciseList,
+      muscleSetMap: computeMuscleSetMap(summaryExerciseList),
     );
 
     // Simplified log data for storage (last completed set per exercise)
-    final logData = summaryExercises.map((e) {
-      final done = e.sets.where((s) => s.done && s.reps > 0).toList();
-      return {
-        'name':   e.name,
-        'sets':   done.length,
-        'reps':   done.isNotEmpty ? done.last.reps   : 0,
-        'weight': done.isNotEmpty ? done.last.weight : 0,
-      };
-    }).where((d) => (d['sets'] as int) > 0).toList();
+    final logData = summaryExercises
+        .map((e) {
+          final done = e.sets.where((s) => s.done && s.reps > 0).toList();
+          return {
+            'name': e.name,
+            'sets': done.length,
+            'reps': done.isNotEmpty ? done.last.reps : 0,
+            'weight': done.isNotEmpty ? done.last.weight : 0,
+          };
+        })
+        .where((d) => (d['sets'] as int) > 0)
+        .toList();
 
     if (logData.isNotEmpty) {
       try {
         await ApiService.saveLog({
-          'date':         now.toIso8601String().split('T')[0],
+          'date': now.toIso8601String().split('T')[0],
           'program_name': capturedName,
-          'day_name':     capturedName.isEmpty ? 'Workout' : capturedName,
-          'focus':        muscleGroups.join(', '),
-          'exercises':    logData,
-          'notes':        _sessionPlan,
+          'day_name': capturedName.isEmpty ? 'Workout' : capturedName,
+          'focus': muscleGroups.join(', '),
+          'exercises': logData,
+          'notes': _sessionPlan,
         });
         await HealthService.instance.writeWorkout({
           'exercises': logData,
-          'elapsed':   capturedElapsed,
+          'elapsed': capturedElapsed,
         });
       } catch (_) {
         if (mounted) {
@@ -524,10 +545,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
     setState(() {
       _workoutActive = false;
-      _elapsed       = 0;
+      _elapsed = 0;
       _exercises.clear();
-      _workoutName   = '';
-      _sessionPlan   = '';
+      _workoutName = '';
+      _sessionPlan = '';
     });
 
     if (mounted && summaryData.exercises.isNotEmpty) {
@@ -574,12 +595,22 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 onPressed: _finishWorkout,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: IronMindTheme.red,
-                  side: BorderSide(color: IronMindTheme.red.withValues(alpha: 0.4)),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  side: BorderSide(
+                    color: IronMindTheme.red.withValues(alpha: 0.4),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
                   minimumSize: Size.zero,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
                 ),
-                child: Text('FINISH', style: GoogleFonts.bebasNeue(fontSize: 13, letterSpacing: 1)),
+                child: Text(
+                  'FINISH',
+                  style: GoogleFonts.bebasNeue(fontSize: 13, letterSpacing: 1),
+                ),
               ),
             ),
         ],
@@ -587,7 +618,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       body: Stack(
         children: [
           if (_workoutActive)
-          _ActiveWorkoutTab(
+            _ActiveWorkoutTab(
               sessionPlan: _sessionPlan,
               exercises: _exercises,
               onRestStart: _startGlobalRest,
@@ -626,9 +657,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             _WorkoutHomeTab(
               key: ValueKey('workout-log-$_routineRefreshTick'),
               onStartEmptyWorkout: _startEmptyWorkout,
-              onCreateRoutine:  _showCreateRoutineSheet,
-              onImportProgram:  _showImportProgramSheet,
-              onStartRoutine:   _startRoutine,
+              onCreateRoutine: _showCreateRoutineSheet,
+              onImportProgram: _showImportProgramSheet,
+              onStartRoutine: _startRoutine,
               onOpenAiGenerator: _showAiWorkoutPrompt,
             ),
           if (_resting)
@@ -654,27 +685,77 @@ List<String> detectMuscleGroupsFromNames(List<String> names) {
   final groups = <String>{};
   for (final name in names) {
     final n = name.toLowerCase();
-    if (n.contains('squat') || n.contains('leg press') || n.contains('lunge') ||
-        n.contains('romanian') || n.contains('rdl') || n.contains('leg curl') ||
-        n.contains('leg extension') || n.contains('hack squat') || n.contains('goblet')) { groups.add('Legs'); }
-    if (n.contains('bench') || n.contains('chest') || n.contains('fly') ||
-        n.contains('push up') || n.contains('pushup') || n.contains('dip') || n.contains('pec')) { groups.add('Chest'); }
-    if (n.contains('row') || n.contains('pull') || n.contains('deadlift') ||
-        n.contains('lat ') || n.contains('lats') || n.contains('pulldown') ||
-        n.contains('t-bar') || n.contains('back') || n.contains('rhomboid') ||
-        n.contains('trap')) { groups.add('Back'); }
-    if (n.contains('shoulder') || n.contains('overhead press') || n.contains('ohp') ||
-        n.contains('military') || n.contains('lateral raise') || n.contains('delt') ||
-        n.contains('face pull') || n.contains('upright row')) { groups.add('Shoulders'); }
-    if (n.contains('curl') || n.contains('bicep') || n.contains('hammer') ||
-        n.contains('preacher')) { groups.add('Biceps'); }
-    if (n.contains('tricep') || n.contains('pushdown') || n.contains('skull') ||
-        (n.contains('extension') && !n.contains('leg'))) { groups.add('Triceps'); }
-    if (n.contains('abs') || n.contains('core') || n.contains('crunch') ||
-        n.contains('plank') || n.contains('sit up') || n.contains('oblique')) { groups.add('Core'); }
-    if (n.contains('calf') || n.contains('calves') || n.contains('soleus')) { groups.add('Calves'); }
-    if (n.contains('glute') || n.contains('hip thrust') || n.contains('abductor') ||
-        n.contains('adductor')) { groups.add('Glutes'); }
+    if (n.contains('squat') ||
+        n.contains('leg press') ||
+        n.contains('lunge') ||
+        n.contains('romanian') ||
+        n.contains('rdl') ||
+        n.contains('leg curl') ||
+        n.contains('leg extension') ||
+        n.contains('hack squat') ||
+        n.contains('goblet')) {
+      groups.add('Legs');
+    }
+    if (n.contains('bench') ||
+        n.contains('chest') ||
+        n.contains('fly') ||
+        n.contains('push up') ||
+        n.contains('pushup') ||
+        n.contains('dip') ||
+        n.contains('pec')) {
+      groups.add('Chest');
+    }
+    if (n.contains('row') ||
+        n.contains('pull') ||
+        n.contains('deadlift') ||
+        n.contains('lat ') ||
+        n.contains('lats') ||
+        n.contains('pulldown') ||
+        n.contains('t-bar') ||
+        n.contains('back') ||
+        n.contains('rhomboid') ||
+        n.contains('trap')) {
+      groups.add('Back');
+    }
+    if (n.contains('shoulder') ||
+        n.contains('overhead press') ||
+        n.contains('ohp') ||
+        n.contains('military') ||
+        n.contains('lateral raise') ||
+        n.contains('delt') ||
+        n.contains('face pull') ||
+        n.contains('upright row')) {
+      groups.add('Shoulders');
+    }
+    if (n.contains('curl') ||
+        n.contains('bicep') ||
+        n.contains('hammer') ||
+        n.contains('preacher')) {
+      groups.add('Biceps');
+    }
+    if (n.contains('tricep') ||
+        n.contains('pushdown') ||
+        n.contains('skull') ||
+        (n.contains('extension') && !n.contains('leg'))) {
+      groups.add('Triceps');
+    }
+    if (n.contains('abs') ||
+        n.contains('core') ||
+        n.contains('crunch') ||
+        n.contains('plank') ||
+        n.contains('sit up') ||
+        n.contains('oblique')) {
+      groups.add('Core');
+    }
+    if (n.contains('calf') || n.contains('calves') || n.contains('soleus')) {
+      groups.add('Calves');
+    }
+    if (n.contains('glute') ||
+        n.contains('hip thrust') ||
+        n.contains('abductor') ||
+        n.contains('adductor')) {
+      groups.add('Glutes');
+    }
   }
   return groups.toList()..sort();
 }
@@ -712,8 +793,13 @@ Future<void> _showOneRepMaxCalculator(BuildContext context) async {
 
         return Dialog(
           backgroundColor: IronMindTheme.surface,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           child: Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
@@ -754,10 +840,9 @@ Future<void> _showOneRepMaxCalculator(BuildContext context) async {
                         Expanded(
                           child: TextField(
                             controller: wC,
-                            keyboardType:
-                                const TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             style: GoogleFonts.dmMono(
                               color: IronMindTheme.textPrimary,
                               fontSize: 13,
@@ -777,7 +862,9 @@ Future<void> _showOneRepMaxCalculator(BuildContext context) async {
                               color: IronMindTheme.textPrimary,
                               fontSize: 13,
                             ),
-                            decoration: const InputDecoration(labelText: 'Reps'),
+                            decoration: const InputDecoration(
+                              labelText: 'Reps',
+                            ),
                             onChanged: (_) => calc(),
                           ),
                         ),
@@ -1092,8 +1179,8 @@ class _ActiveWorkoutTab extends StatelessWidget {
               openLibrary: openLibrary,
               onRestStart: onRestStart,
               onPr: (highlight) {
-                final weightLabel = highlight.weight.truncateToDouble() ==
-                        highlight.weight
+                final weightLabel =
+                    highlight.weight.truncateToDouble() == highlight.weight
                     ? highlight.weight.toStringAsFixed(0)
                     : highlight.weight.toStringAsFixed(1);
                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -1135,8 +1222,8 @@ class _ExerciseEntry {
   BarType? barType;
   final TextEditingController nameCtrl;
   _ExerciseEntry({this.name = '', List<_SetEntry>? sets, this.barType})
-      : nameCtrl = TextEditingController(text: name),
-        sets = sets ?? [_SetEntry()];
+    : nameCtrl = TextEditingController(text: name),
+      sets = sets ?? [_SetEntry()];
 }
 
 class _SetEntry {
@@ -1157,33 +1244,38 @@ class _SchemePreset {
   final String category;
   final List<int> repsPerSet;
   final double? suggestedPct;
-  const _SchemePreset(this.label, this.category, this.repsPerSet, {this.suggestedPct});
+  const _SchemePreset(
+    this.label,
+    this.category,
+    this.repsPerSet, {
+    this.suggestedPct,
+  });
 }
 
 const _strengthSchemes = <_SchemePreset>[
-  _SchemePreset('5×5',        'Strength',   [5,5,5,5,5],     suggestedPct: 0.80),
-  _SchemePreset('5×3',        'Strength',   [3,3,3,3,3],     suggestedPct: 0.875),
-  _SchemePreset('3×3',        'Strength',   [3,3,3],         suggestedPct: 0.90),
-  _SchemePreset('5/3/1',      'Wendler',    [5,3,1],         suggestedPct: null),
-  _SchemePreset('Wave 5-3-1', 'Wave',       [5,3,1,5,3,1],   suggestedPct: null),
-  _SchemePreset('5-4-3-2-1',  'Ladder',     [5,4,3,2,1],     suggestedPct: null),
-  _SchemePreset('3×1 Singles','Max Effort', [1,1,1],         suggestedPct: 0.94),
+  _SchemePreset('5×5', 'Strength', [5, 5, 5, 5, 5], suggestedPct: 0.80),
+  _SchemePreset('5×3', 'Strength', [3, 3, 3, 3, 3], suggestedPct: 0.875),
+  _SchemePreset('3×3', 'Strength', [3, 3, 3], suggestedPct: 0.90),
+  _SchemePreset('5/3/1', 'Wendler', [5, 3, 1], suggestedPct: null),
+  _SchemePreset('Wave 5-3-1', 'Wave', [5, 3, 1, 5, 3, 1], suggestedPct: null),
+  _SchemePreset('5-4-3-2-1', 'Ladder', [5, 4, 3, 2, 1], suggestedPct: null),
+  _SchemePreset('3×1 Singles', 'Max Effort', [1, 1, 1], suggestedPct: 0.94),
 ];
 
 const _hypertrophySchemes = <_SchemePreset>[
-  _SchemePreset('4×8',   'Hypertrophy',  [8,8,8,8],       suggestedPct: 0.72),
-  _SchemePreset('4×10',  'Hypertrophy',  [10,10,10,10],   suggestedPct: 0.67),
-  _SchemePreset('3×12',  'Hypertrophy',  [12,12,12],      suggestedPct: 0.63),
-  _SchemePreset('5×8',   'Volume',       [8,8,8,8,8],     suggestedPct: 0.70),
-  _SchemePreset('4×12',  'Volume',       [12,12,12,12],   suggestedPct: 0.63),
-  _SchemePreset('4×15',  'Endurance',    [15,15,15,15],   suggestedPct: 0.58),
+  _SchemePreset('4×8', 'Hypertrophy', [8, 8, 8, 8], suggestedPct: 0.72),
+  _SchemePreset('4×10', 'Hypertrophy', [10, 10, 10, 10], suggestedPct: 0.67),
+  _SchemePreset('3×12', 'Hypertrophy', [12, 12, 12], suggestedPct: 0.63),
+  _SchemePreset('5×8', 'Volume', [8, 8, 8, 8, 8], suggestedPct: 0.70),
+  _SchemePreset('4×12', 'Volume', [12, 12, 12, 12], suggestedPct: 0.63),
+  _SchemePreset('4×15', 'Endurance', [15, 15, 15, 15], suggestedPct: 0.58),
 ];
 
 const _peakingSchemes = <_SchemePreset>[
-  _SchemePreset('4×2',        'Peaking',    [2,2,2,2],       suggestedPct: 0.90),
-  _SchemePreset('5×2',        'Peaking',    [2,2,2,2,2],     suggestedPct: 0.88),
-  _SchemePreset('3×1',        'Singles',    [1,1,1],         suggestedPct: 0.93),
-  _SchemePreset('2-2-2-1-1',  'Comp Prep', [2,2,2,1,1],     suggestedPct: null),
+  _SchemePreset('4×2', 'Peaking', [2, 2, 2, 2], suggestedPct: 0.90),
+  _SchemePreset('5×2', 'Peaking', [2, 2, 2, 2, 2], suggestedPct: 0.88),
+  _SchemePreset('3×1', 'Singles', [1, 1, 1], suggestedPct: 0.93),
+  _SchemePreset('2-2-2-1-1', 'Comp Prep', [2, 2, 2, 1, 1], suggestedPct: null),
 ];
 
 class _ExerciseCard extends StatefulWidget {
@@ -1212,7 +1304,11 @@ class _ExerciseCardState extends State<_ExerciseCard> {
       return;
     }
 
-    final isNewPr = await ApiService.checkAndSavePR(exercise, set.weight, set.reps);
+    final isNewPr = await ApiService.checkAndSavePR(
+      exercise,
+      set.weight,
+      set.reps,
+    );
     set.prTracked = true;
     if (!mounted || !isNewPr) return;
 
@@ -1221,7 +1317,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
         exercise: exercise,
         weight: set.weight,
         reps: set.reps,
-        estimatedOneRepMax: ApiService.calculate1RM(set.weight, set.reps).round(),
+        estimatedOneRepMax: ApiService.calculate1RM(
+          set.weight,
+          set.reps,
+        ).round(),
       ),
     );
   }
@@ -1277,7 +1376,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               GestureDetector(
                 onTap: () => _showBarPicker(context, e),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: e.barType != null
                         ? IronMindTheme.accent.withValues(alpha: 0.08)
@@ -1292,8 +1394,11 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.fitness_center_rounded,
-                          size: 11, color: IronMindTheme.text3),
+                      const Icon(
+                        Icons.fitness_center_rounded,
+                        size: 11,
+                        color: IronMindTheme.text3,
+                      ),
                       const SizedBox(width: 5),
                       Text(
                         e.barType != null
@@ -1307,11 +1412,13 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Icon(Icons.keyboard_arrow_down_rounded,
-                          size: 13,
-                          color: e.barType != null
-                              ? IronMindTheme.accent
-                              : IronMindTheme.text3),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 13,
+                        color: e.barType != null
+                            ? IronMindTheme.accent
+                            : IronMindTheme.text3,
+                      ),
                     ],
                   ),
                 ),
@@ -1320,7 +1427,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               GestureDetector(
                 onTap: () => _showLoadCalc(context, e),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: IronMindTheme.surface2,
                     borderRadius: BorderRadius.circular(6),
@@ -1329,11 +1439,19 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.percent_rounded, size: 11, color: IronMindTheme.text3),
+                      const Icon(
+                        Icons.percent_rounded,
+                        size: 11,
+                        color: IronMindTheme.text3,
+                      ),
                       const SizedBox(width: 4),
-                      Text('Load Calc',
+                      Text(
+                        'Load Calc',
                         style: GoogleFonts.dmMono(
-                          color: IronMindTheme.text3, fontSize: 10)),
+                          color: IronMindTheme.text3,
+                          fontSize: 10,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1439,16 +1557,23 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     flex: 2,
                     child: TextField(
                       controller: s.weightCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       textAlign: TextAlign.center,
                       textInputAction: TextInputAction.next,
                       style: GoogleFonts.dmMono(
-                        color: s.done ? IronMindTheme.green : IronMindTheme.textPrimary,
+                        color: s.done
+                            ? IronMindTheme.green
+                            : IronMindTheme.textPrimary,
                         fontSize: 14,
                       ),
                       decoration: InputDecoration(
                         hintText: '0',
-                        hintStyle: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 14),
+                        hintStyle: GoogleFonts.dmMono(
+                          color: IronMindTheme.text3,
+                          fontSize: 14,
+                        ),
                         border: InputBorder.none,
                         filled: false,
                         contentPadding: EdgeInsets.zero,
@@ -1465,12 +1590,17 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                       textAlign: TextAlign.center,
                       textInputAction: TextInputAction.next,
                       style: GoogleFonts.dmMono(
-                        color: s.done ? IronMindTheme.green : IronMindTheme.textPrimary,
+                        color: s.done
+                            ? IronMindTheme.green
+                            : IronMindTheme.textPrimary,
                         fontSize: 14,
                       ),
                       decoration: InputDecoration(
                         hintText: '0',
-                        hintStyle: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 14),
+                        hintStyle: GoogleFonts.dmMono(
+                          color: IronMindTheme.text3,
+                          fontSize: 14,
+                        ),
                         border: InputBorder.none,
                         filled: false,
                         contentPadding: EdgeInsets.zero,
@@ -1483,18 +1613,25 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     flex: 2,
                     child: TextField(
                       controller: s.rpeCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       textAlign: TextAlign.center,
                       textInputAction: TextInputAction.done,
                       style: GoogleFonts.dmMono(
                         color: s.done
-                            ? (s.rpe != null ? IronMindTheme.accent : IronMindTheme.green)
+                            ? (s.rpe != null
+                                  ? IronMindTheme.accent
+                                  : IronMindTheme.green)
                             : IronMindTheme.text2,
                         fontSize: 13,
                       ),
                       decoration: InputDecoration(
                         hintText: '—',
-                        hintStyle: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 13),
+                        hintStyle: GoogleFonts.dmMono(
+                          color: IronMindTheme.text3,
+                          fontSize: 13,
+                        ),
                         border: InputBorder.none,
                         filled: false,
                         contentPadding: EdgeInsets.zero,
@@ -1585,16 +1722,27 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: IronMindTheme.green,
                   side: BorderSide(color: IronMindTheme.green.withOpacity(0.4)),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   minimumSize: Size.zero,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.grid_view_rounded, size: 13),
                     const SizedBox(width: 4),
-                    Text('Scheme', style: GoogleFonts.dmMono(fontSize: 10, color: IronMindTheme.green)),
+                    Text(
+                      'Scheme',
+                      style: GoogleFonts.dmMono(
+                        fontSize: 10,
+                        color: IronMindTheme.green,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1642,10 +1790,8 @@ class _ExerciseCardState extends State<_ExerciseCard> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _LoadCalcSheet(
-        exerciseName: entry.name,
-        barType: entry.barType,
-      ),
+      builder: (_) =>
+          _LoadCalcSheet(exerciseName: entry.name, barType: entry.barType),
     );
   }
 
@@ -1666,7 +1812,8 @@ class _ExerciseCardState extends State<_ExerciseCard> {
           children: [
             const SizedBox(height: 10),
             Container(
-              width: 36, height: 4,
+              width: 36,
+              height: 4,
               decoration: BoxDecoration(
                 color: IronMindTheme.border,
                 borderRadius: BorderRadius.circular(2),
@@ -1677,11 +1824,22 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('BAR TYPE', style: GoogleFonts.dmMono(
-                    color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1.5)),
+                  Text(
+                    'BAR TYPE',
+                    style: GoogleFonts.dmMono(
+                      color: IronMindTheme.text3,
+                      fontSize: 9,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text('Select the bar for this exercise', style: GoogleFonts.dmSans(
-                    color: IronMindTheme.text2, fontSize: 13)),
+                  Text(
+                    'Select the bar for this exercise',
+                    style: GoogleFonts.dmSans(
+                      color: IronMindTheme.text2,
+                      fontSize: 13,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1696,7 +1854,8 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     name: 'Default / No Bar',
                     shortName: '—',
                     weightLb: null,
-                    benefit: 'Use for dumbbell, cable, machine, or bodyweight exercises.',
+                    benefit:
+                        'Use for dumbbell, cable, machine, or bodyweight exercises.',
                     bestFor: 'Dumbbells · Cables · Machines',
                     onTap: () {
                       setState(() => entry.barType = null);
@@ -1866,7 +2025,9 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: IronMindTheme.accent));
+      return const Center(
+        child: CircularProgressIndicator(color: IronMindTheme.accent),
+      );
     }
 
     return RefreshIndicator(
@@ -1876,7 +2037,6 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
         children: [
-
           // ── Start button ─────────────────────────────────────────────────
           GestureDetector(
             onTap: widget.onStartEmptyWorkout,
@@ -1885,10 +2045,7 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
               padding: const EdgeInsets.symmetric(vertical: 15),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    IronMindTheme.accent,
-                    const Color(0xFF2D8FD4),
-                  ],
+                  colors: [IronMindTheme.accent, const Color(0xFF2D8FD4)],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 ),
@@ -1906,16 +2063,21 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
                 children: [
                   Transform.rotate(
                     angle: -0.78,
-                    child: const Icon(Icons.fitness_center,
-                      color: Colors.black, size: 18),
+                    child: const Icon(
+                      Icons.fitness_center,
+                      color: Colors.black,
+                      size: 18,
+                    ),
                   ),
                   const SizedBox(width: 10),
-                  Text('START WORKOUT',
+                  Text(
+                    'START WORKOUT',
                     style: GoogleFonts.bebasNeue(
                       color: Colors.black,
                       fontSize: 20,
                       letterSpacing: 2,
-                    )),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1923,30 +2085,32 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
           const SizedBox(height: 10),
 
           // ── Secondary actions ────────────────────────────────────────────
-          Row(children: [
-            Expanded(
-              child: _QuickStartButton(
-                label: 'NEW ROUTINE',
-                icon: Icons.edit_outlined,
-                onTap: widget.onCreateRoutine,
+          Row(
+            children: [
+              Expanded(
+                child: _QuickStartButton(
+                  label: 'NEW ROUTINE',
+                  icon: Icons.edit_outlined,
+                  onTap: widget.onCreateRoutine,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _QuickStartButton(
-                label: 'EXERCISES',
-                icon: Icons.search,
-                onTap: () => _showExploreSheet(context, onAdded: _load),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _QuickStartButton(
+                  label: 'EXERCISES',
+                  icon: Icons.search,
+                  onTap: () => _showExploreSheet(context, onAdded: _load),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            _QuickStartButton(
-              label: 'IMPORT',
-              icon: Icons.upload_file_outlined,
-              onTap: widget.onImportProgram,
-              compact: true,
-            ),
-          ]),
+              const SizedBox(width: 8),
+              _QuickStartButton(
+                label: 'IMPORT',
+                icon: Icons.upload_file_outlined,
+                onTap: widget.onImportProgram,
+                compact: true,
+              ),
+            ],
+          ),
           // ── Routines ─────────────────────────────────────────────────────
           SectionHeader(
             title: 'My Routines',
@@ -1955,16 +2119,26 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
               children: [
                 GestureDetector(
                   onTap: widget.onImportProgram,
-                  child: Text('IMPORT',
+                  child: Text(
+                    'IMPORT',
                     style: GoogleFonts.dmMono(
-                      color: IronMindTheme.blue, fontSize: 10, letterSpacing: 1)),
+                      color: IronMindTheme.blue,
+                      fontSize: 10,
+                      letterSpacing: 1,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 GestureDetector(
                   onTap: widget.onCreateRoutine,
-                  child: Text('+ NEW',
+                  child: Text(
+                    '+ NEW',
                     style: GoogleFonts.dmMono(
-                      color: IronMindTheme.accent, fontSize: 10, letterSpacing: 1)),
+                      color: IronMindTheme.accent,
+                      fontSize: 10,
+                      letterSpacing: 1,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1973,35 +2147,41 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
           if (_routines.isEmpty)
             _EmptyRoutinesCard(onCreateRoutine: widget.onCreateRoutine)
           else
-            ..._routines.map((r) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Dismissible(
-                key: ValueKey(r['id'] ?? r['name']),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+            ..._routines.map(
+              (r) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Dismissible(
+                  key: ValueKey(r['id'] ?? r['name']),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.redAccent.withOpacity(0.4),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.redAccent,
+                      size: 22,
+                    ),
                   ),
-                  child: const Icon(Icons.delete_outline,
-                    color: Colors.redAccent, size: 22),
-                ),
-                confirmDismiss: (_) async {
-                  final id = r['id']?.toString() ?? '';
-                  if (id.isNotEmpty) await ApiService.deleteRoutine(id);
-                  await _load();
-                  return false; // _load rebuilds list, no need for Dismissible to remove
-                },
-                child: _RoutineCard(
-                  routine: r,
-                  onStart: () => widget.onStartRoutine(r),
+                  confirmDismiss: (_) async {
+                    final id = r['id']?.toString() ?? '';
+                    if (id.isNotEmpty) await ApiService.deleteRoutine(id);
+                    await _load();
+                    return false; // _load rebuilds list, no need for Dismissible to remove
+                  },
+                  child: _RoutineCard(
+                    routine: r,
+                    onStart: () => widget.onStartRoutine(r),
+                  ),
                 ),
               ),
-            )),
-
+            ),
         ],
       ),
     );
@@ -2019,14 +2199,14 @@ class _QuickStartButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onTap,
-    this.accent  = false,
+    this.accent = false,
     this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color  = accent  ? IronMindTheme.accent : IronMindTheme.textPrimary;
-    final bg     = accent  ? IronMindTheme.accentDim : IronMindTheme.surface;
+    final color = accent ? IronMindTheme.accent : IronMindTheme.textPrimary;
+    final bg = accent ? IronMindTheme.accentDim : IronMindTheme.surface;
     final border = accent
         ? IronMindTheme.accent.withValues(alpha: 0.35)
         : IronMindTheme.border2;
@@ -2051,7 +2231,10 @@ class _QuickStartButton extends StatelessWidget {
                   Text(
                     label,
                     style: GoogleFonts.bebasNeue(
-                      color: color, fontSize: 13, letterSpacing: 1.2),
+                      color: color,
+                      fontSize: 13,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ],
               ),
@@ -2075,36 +2258,53 @@ class _EmptyRoutinesCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: IronMindTheme.border),
         ),
-        child: Row(children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: IronMindTheme.accentDim,
-              borderRadius: BorderRadius.circular(8),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: IronMindTheme.accentDim,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.add,
+                color: IronMindTheme.accent,
+                size: 18,
+              ),
             ),
-            child: const Icon(Icons.add, color: IronMindTheme.accent, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
-                'Create your first routine',
-                style: GoogleFonts.dmSans(
-                  color: IronMindTheme.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Create your first routine',
+                    style: GoogleFonts.dmSans(
+                      color: IronMindTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Save exercises, sets, and order for your go-to sessions.',
+                    style: GoogleFonts.dmSans(
+                      color: IronMindTheme.text3,
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                'Save exercises, sets, and order for your go-to sessions.',
-                style: GoogleFonts.dmSans(color: IronMindTheme.text3, fontSize: 11, height: 1.4),
-              ),
-            ]),
-          ),
-          const Icon(Icons.chevron_right, color: IronMindTheme.text3, size: 16),
-        ]),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              color: IronMindTheme.text3,
+              size: 16,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2256,10 +2456,15 @@ class _LogHistoryTabState extends State<_LogHistoryTab> {
                     decoration: BoxDecoration(
                       color: Colors.redAccent.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                      border: Border.all(
+                        color: Colors.redAccent.withOpacity(0.4),
+                      ),
                     ),
-                    child: const Icon(Icons.delete_outline,
-                      color: Colors.redAccent, size: 22),
+                    child: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.redAccent,
+                      size: 22,
+                    ),
                   ),
                   confirmDismiss: (_) async {
                     final id = routine['id']?.toString() ?? '';
@@ -3872,7 +4077,9 @@ Future<void> _showRoutineBuilderSheet(
                         (exercise) => InputChip(
                           label: Text(exercise),
                           onDeleted: () {
-                            setModalState(() => selectedExercises.remove(exercise));
+                            setModalState(
+                              () => selectedExercises.remove(exercise),
+                            );
                           },
                           deleteIconColor: IronMindTheme.text2,
                           selected: true,
@@ -3892,11 +4099,14 @@ Future<void> _showRoutineBuilderSheet(
               IronButton(
                 label: 'CREATE ROUTINE',
                 onPressed: () async {
-                  if (nameCtrl.text.trim().isEmpty || selectedExercises.isEmpty) {
+                  if (nameCtrl.text.trim().isEmpty ||
+                      selectedExercises.isEmpty) {
                     return;
                   }
                   // Auto-detect muscle groups from exercise names
-                  final detected = detectMuscleGroupsFromNames(selectedExercises);
+                  final detected = detectMuscleGroupsFromNames(
+                    selectedExercises,
+                  );
                   final primary = detected.take(2).toList();
                   final secondary = detected.skip(2).toList();
                   await ApiService.saveRoutine({
@@ -3928,7 +4138,11 @@ class _RoutineCard extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback? onDelete;
 
-  const _RoutineCard({required this.routine, required this.onStart, this.onDelete});
+  const _RoutineCard({
+    required this.routine,
+    required this.onStart,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -4015,28 +4229,60 @@ class _ExploreBanner extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: IronMindTheme.border),
         ),
-        child: Row(children: [
-          Container(
-            width: 32, height: 32,
-            decoration: BoxDecoration(
-              color: IronMindTheme.green.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: IronMindTheme.green.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.explore_outlined,
+                color: IronMindTheme.green,
+                size: 16,
+              ),
             ),
-            child: const Icon(Icons.explore_outlined, color: IronMindTheme.green, size: 16),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('EXPLORE ROUTINES',
-                  style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 14, letterSpacing: 1.4)),
-              Text('5x5, PPL, Upper/Lower, and more',
-                  style: GoogleFonts.dmSans(color: IronMindTheme.text3, fontSize: 10)),
-            ]),
-          ),
-          Text('BROWSE', style: GoogleFonts.dmMono(color: IronMindTheme.green, fontSize: 9, letterSpacing: 1)),
-          const SizedBox(width: 2),
-          const Icon(Icons.chevron_right, color: IronMindTheme.green, size: 14),
-        ]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'EXPLORE ROUTINES',
+                    style: GoogleFonts.bebasNeue(
+                      color: IronMindTheme.textPrimary,
+                      fontSize: 14,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                  Text(
+                    '5x5, PPL, Upper/Lower, and more',
+                    style: GoogleFonts.dmSans(
+                      color: IronMindTheme.text3,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              'BROWSE',
+              style: GoogleFonts.dmMono(
+                color: IronMindTheme.green,
+                fontSize: 9,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(width: 2),
+            const Icon(
+              Icons.chevron_right,
+              color: IronMindTheme.green,
+              size: 14,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -4067,7 +4313,15 @@ class _ExploreSheetState extends State<_ExploreSheet> {
   String _selectedCategory = 'All';
   final Set<String> _added = {};
 
-  static const _categories = ['All', 'Strength', 'Hypertrophy', 'PPL', 'Full Body', 'Upper/Lower', 'Beginner'];
+  static const _categories = [
+    'All',
+    'Strength',
+    'Hypertrophy',
+    'PPL',
+    'Full Body',
+    'Upper/Lower',
+    'Beginner',
+  ];
 
   static const _library = <Map<String, dynamic>>[
     // ── Strength ──────────────────────────────────────────────────────────
@@ -4076,17 +4330,25 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'category': 'Strength',
       'difficulty': 'Beginner',
       'days': '3 days/week',
-      'description': 'Classic barbell program alternating Workout A and B. Adds weight every session.',
+      'description':
+          'Classic barbell program alternating Workout A and B. Adds weight every session.',
       'primary': ['Chest', 'Back', 'Legs'],
       'secondary': ['Shoulders', 'Core'],
-      'exercises': ['Squat', 'Bench Press', 'Barbell Row', 'Overhead Press', 'Deadlift'],
+      'exercises': [
+        'Squat',
+        'Bench Press',
+        'Barbell Row',
+        'Overhead Press',
+        'Deadlift',
+      ],
     },
     {
       'name': 'Starting Strength',
       'category': 'Strength',
       'difficulty': 'Beginner',
       'days': '3 days/week',
-      'description': 'Mark Rippetoe\'s foundational barbell program. Focus on the big 4 compound lifts.',
+      'description':
+          'Mark Rippetoe\'s foundational barbell program. Focus on the big 4 compound lifts.',
       'primary': ['Legs', 'Back', 'Chest'],
       'secondary': ['Shoulders'],
       'exercises': ['Squat', 'Press', 'Deadlift', 'Bench Press', 'Power Clean'],
@@ -4096,20 +4358,35 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'category': 'Strength',
       'difficulty': 'Intermediate',
       'days': '4 days/week',
-      'description': 'Jim Wendler\'s 5/3/1 structured around the squat, bench, deadlift, and OHP with assistance work.',
+      'description':
+          'Jim Wendler\'s 5/3/1 structured around the squat, bench, deadlift, and OHP with assistance work.',
       'primary': ['Legs', 'Chest', 'Back', 'Shoulders'],
       'secondary': ['Biceps', 'Triceps'],
-      'exercises': ['Squat', 'Bench Press', 'Deadlift', 'Overhead Press', 'Pull-Up', 'Dip'],
+      'exercises': [
+        'Squat',
+        'Bench Press',
+        'Deadlift',
+        'Overhead Press',
+        'Pull-Up',
+        'Dip',
+      ],
     },
     {
       'name': 'Texas Method',
       'category': 'Strength',
       'difficulty': 'Intermediate',
       'days': '3 days/week',
-      'description': 'Volume, recovery, and intensity days built around squatting 3x per week.',
+      'description':
+          'Volume, recovery, and intensity days built around squatting 3x per week.',
       'primary': ['Legs', 'Back', 'Chest'],
       'secondary': ['Shoulders'],
-      'exercises': ['Squat', 'Bench Press', 'Deadlift', 'Overhead Press', 'Power Clean'],
+      'exercises': [
+        'Squat',
+        'Bench Press',
+        'Deadlift',
+        'Overhead Press',
+        'Power Clean',
+      ],
     },
     // ── PPL ───────────────────────────────────────────────────────────────
     {
@@ -4120,7 +4397,14 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'description': 'Chest, shoulders, and triceps focused push session.',
       'primary': ['Chest', 'Shoulders'],
       'secondary': ['Triceps'],
-      'exercises': ['Bench Press', 'Overhead Press', 'Incline Dumbbell Press', 'Lateral Raise', 'Tricep Pushdown', 'Overhead Tricep Extension'],
+      'exercises': [
+        'Bench Press',
+        'Overhead Press',
+        'Incline Dumbbell Press',
+        'Lateral Raise',
+        'Tricep Pushdown',
+        'Overhead Tricep Extension',
+      ],
     },
     {
       'name': 'PPL — Pull A',
@@ -4130,17 +4414,32 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'description': 'Back, rear delts, and biceps pull session.',
       'primary': ['Back', 'Biceps'],
       'secondary': ['Shoulders'],
-      'exercises': ['Deadlift', 'Pull-Up', 'Barbell Row', 'Face Pull', 'Hammer Curl', 'Barbell Curl'],
+      'exercises': [
+        'Deadlift',
+        'Pull-Up',
+        'Barbell Row',
+        'Face Pull',
+        'Hammer Curl',
+        'Barbell Curl',
+      ],
     },
     {
       'name': 'PPL — Legs A',
       'category': 'PPL',
       'difficulty': 'Intermediate',
       'days': 'Leg day',
-      'description': 'Squat-focused leg day with quad, hamstring, and calf work.',
+      'description':
+          'Squat-focused leg day with quad, hamstring, and calf work.',
       'primary': ['Legs', 'Glutes'],
       'secondary': ['Calves', 'Core'],
-      'exercises': ['Squat', 'Romanian Deadlift', 'Leg Press', 'Leg Curl', 'Leg Extension', 'Calf Raise'],
+      'exercises': [
+        'Squat',
+        'Romanian Deadlift',
+        'Leg Press',
+        'Leg Curl',
+        'Leg Extension',
+        'Calf Raise',
+      ],
     },
     // ── Upper/Lower ───────────────────────────────────────────────────────
     {
@@ -4151,7 +4450,14 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'description': 'Strength-focused upper day with heavy compounds.',
       'primary': ['Chest', 'Back'],
       'secondary': ['Shoulders', 'Biceps', 'Triceps'],
-      'exercises': ['Bench Press', 'Barbell Row', 'Overhead Press', 'Pull-Up', 'Barbell Curl', 'Tricep Pushdown'],
+      'exercises': [
+        'Bench Press',
+        'Barbell Row',
+        'Overhead Press',
+        'Pull-Up',
+        'Barbell Curl',
+        'Tricep Pushdown',
+      ],
     },
     {
       'name': 'Lower Body A',
@@ -4161,27 +4467,50 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'description': 'Squat and deadlift lower day with accessory volume.',
       'primary': ['Legs', 'Glutes'],
       'secondary': ['Calves', 'Core'],
-      'exercises': ['Squat', 'Deadlift', 'Leg Press', 'Leg Curl', 'Calf Raise', 'Plank'],
+      'exercises': [
+        'Squat',
+        'Deadlift',
+        'Leg Press',
+        'Leg Curl',
+        'Calf Raise',
+        'Plank',
+      ],
     },
     {
       'name': 'Upper Body B',
       'category': 'Upper/Lower',
       'difficulty': 'Intermediate',
       'days': 'Upper day',
-      'description': 'Hypertrophy-focused upper day with dumbbell and cable volume.',
+      'description':
+          'Hypertrophy-focused upper day with dumbbell and cable volume.',
       'primary': ['Chest', 'Back', 'Shoulders'],
       'secondary': ['Biceps', 'Triceps'],
-      'exercises': ['Incline Dumbbell Press', 'Cable Row', 'Lateral Raise', 'Dumbbell Row', 'Incline Curl', 'Skull Crusher'],
+      'exercises': [
+        'Incline Dumbbell Press',
+        'Cable Row',
+        'Lateral Raise',
+        'Dumbbell Row',
+        'Incline Curl',
+        'Skull Crusher',
+      ],
     },
     {
       'name': 'Lower Body B',
       'category': 'Upper/Lower',
       'difficulty': 'Intermediate',
       'days': 'Lower day',
-      'description': 'Pause squats, Romanian deadlifts, and isolation accessory work.',
+      'description':
+          'Pause squats, Romanian deadlifts, and isolation accessory work.',
       'primary': ['Legs', 'Glutes'],
       'secondary': ['Calves'],
-      'exercises': ['Pause Squat', 'Romanian Deadlift', 'Hack Squat', 'Leg Curl', 'Leg Extension', 'Seated Calf Raise'],
+      'exercises': [
+        'Pause Squat',
+        'Romanian Deadlift',
+        'Hack Squat',
+        'Leg Curl',
+        'Leg Extension',
+        'Seated Calf Raise',
+      ],
     },
     // ── Hypertrophy ───────────────────────────────────────────────────────
     {
@@ -4192,17 +4521,32 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'description': 'High-volume chest and triceps session for muscle growth.',
       'primary': ['Chest'],
       'secondary': ['Triceps'],
-      'exercises': ['Bench Press', 'Incline Dumbbell Press', 'Cable Fly', 'Dip', 'Tricep Pushdown', 'Skull Crusher'],
+      'exercises': [
+        'Bench Press',
+        'Incline Dumbbell Press',
+        'Cable Fly',
+        'Dip',
+        'Tricep Pushdown',
+        'Skull Crusher',
+      ],
     },
     {
       'name': 'Back & Biceps',
       'category': 'Hypertrophy',
       'difficulty': 'Intermediate',
       'days': 'Pull day',
-      'description': 'High-volume back and biceps session with compound and isolation work.',
+      'description':
+          'High-volume back and biceps session with compound and isolation work.',
       'primary': ['Back'],
       'secondary': ['Biceps'],
-      'exercises': ['Pull-Up', 'Barbell Row', 'Lat Pulldown', 'Cable Row', 'Barbell Curl', 'Hammer Curl'],
+      'exercises': [
+        'Pull-Up',
+        'Barbell Row',
+        'Lat Pulldown',
+        'Cable Row',
+        'Barbell Curl',
+        'Hammer Curl',
+      ],
     },
     {
       'name': 'Shoulders & Arms',
@@ -4212,17 +4556,33 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'description': 'Dedicated shoulder and arm hypertrophy session.',
       'primary': ['Shoulders'],
       'secondary': ['Biceps', 'Triceps'],
-      'exercises': ['Overhead Press', 'Lateral Raise', 'Rear Delt Fly', 'Face Pull', 'Barbell Curl', 'Tricep Pushdown'],
+      'exercises': [
+        'Overhead Press',
+        'Lateral Raise',
+        'Rear Delt Fly',
+        'Face Pull',
+        'Barbell Curl',
+        'Tricep Pushdown',
+      ],
     },
     {
       'name': 'Legs Hypertrophy',
       'category': 'Hypertrophy',
       'difficulty': 'Intermediate',
       'days': 'Leg day',
-      'description': 'High-volume leg day prioritising quad and hamstring growth.',
+      'description':
+          'High-volume leg day prioritising quad and hamstring growth.',
       'primary': ['Legs', 'Glutes'],
       'secondary': ['Calves'],
-      'exercises': ['Squat', 'Hack Squat', 'Leg Press', 'Romanian Deadlift', 'Leg Curl', 'Leg Extension', 'Seated Calf Raise'],
+      'exercises': [
+        'Squat',
+        'Hack Squat',
+        'Leg Press',
+        'Romanian Deadlift',
+        'Leg Curl',
+        'Leg Extension',
+        'Seated Calf Raise',
+      ],
     },
     // ── Full Body ─────────────────────────────────────────────────────────
     {
@@ -4230,10 +4590,18 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'category': 'Full Body',
       'difficulty': 'Beginner',
       'days': 'Full body',
-      'description': 'Balanced full body session hitting every major muscle group.',
+      'description':
+          'Balanced full body session hitting every major muscle group.',
       'primary': ['Chest', 'Back', 'Legs'],
       'secondary': ['Shoulders', 'Core'],
-      'exercises': ['Squat', 'Bench Press', 'Barbell Row', 'Overhead Press', 'Romanian Deadlift', 'Plank'],
+      'exercises': [
+        'Squat',
+        'Bench Press',
+        'Barbell Row',
+        'Overhead Press',
+        'Romanian Deadlift',
+        'Plank',
+      ],
     },
     {
       'name': 'Full Body B',
@@ -4243,17 +4611,31 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'description': 'Alternate with Full Body A for a complete 3-day program.',
       'primary': ['Legs', 'Back', 'Chest'],
       'secondary': ['Shoulders', 'Biceps'],
-      'exercises': ['Deadlift', 'Pull-Up', 'Dumbbell Press', 'Goblet Squat', 'Dumbbell Row', 'Barbell Curl'],
+      'exercises': [
+        'Deadlift',
+        'Pull-Up',
+        'Dumbbell Press',
+        'Goblet Squat',
+        'Dumbbell Row',
+        'Barbell Curl',
+      ],
     },
     {
       'name': 'Minimalist Full Body',
       'category': 'Full Body',
       'difficulty': 'Beginner',
       'days': '2–3 days/week',
-      'description': '5 key movements. Perfect for time-limited training or travel.',
+      'description':
+          '5 key movements. Perfect for time-limited training or travel.',
       'primary': ['Chest', 'Back', 'Legs'],
       'secondary': ['Shoulders', 'Core'],
-      'exercises': ['Squat', 'Deadlift', 'Bench Press', 'Pull-Up', 'Overhead Press'],
+      'exercises': [
+        'Squat',
+        'Deadlift',
+        'Bench Press',
+        'Pull-Up',
+        'Overhead Press',
+      ],
     },
     // ── Beginner ──────────────────────────────────────────────────────────
     {
@@ -4264,7 +4646,13 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'description': 'Simple push session for those just starting out.',
       'primary': ['Chest', 'Shoulders'],
       'secondary': ['Triceps'],
-      'exercises': ['Bench Press', 'Overhead Press', 'Push-Up', 'Lateral Raise', 'Tricep Pushdown'],
+      'exercises': [
+        'Bench Press',
+        'Overhead Press',
+        'Push-Up',
+        'Lateral Raise',
+        'Tricep Pushdown',
+      ],
     },
     {
       'name': 'Beginner Pull Day',
@@ -4274,7 +4662,13 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'description': 'Simple pull session for those just starting out.',
       'primary': ['Back', 'Biceps'],
       'secondary': ['Shoulders'],
-      'exercises': ['Lat Pulldown', 'Dumbbell Row', 'Face Pull', 'Barbell Curl', 'Hammer Curl'],
+      'exercises': [
+        'Lat Pulldown',
+        'Dumbbell Row',
+        'Face Pull',
+        'Barbell Curl',
+        'Hammer Curl',
+      ],
     },
     {
       'name': 'Beginner Leg Day',
@@ -4284,7 +4678,14 @@ class _ExploreSheetState extends State<_ExploreSheet> {
       'description': 'Simple leg session to build the movement patterns.',
       'primary': ['Legs', 'Glutes'],
       'secondary': ['Calves', 'Core'],
-      'exercises': ['Goblet Squat', 'Leg Press', 'Leg Curl', 'Leg Extension', 'Calf Raise', 'Plank'],
+      'exercises': [
+        'Goblet Squat',
+        'Leg Press',
+        'Leg Curl',
+        'Leg Extension',
+        'Calf Raise',
+        'Plank',
+      ],
     },
   ];
 
@@ -4299,104 +4700,149 @@ class _ExploreSheetState extends State<_ExploreSheet> {
         color: IronMindTheme.bg,
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      child: Column(children: [
-        // Handle
-        Container(
-          margin: const EdgeInsets.only(top: 12, bottom: 6),
-          width: 36, height: 4,
-          decoration: BoxDecoration(color: IronMindTheme.border2, borderRadius: BorderRadius.circular(2)),
-        ),
-        // Header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('EXPLORE ROUTINES',
-                    style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 22, letterSpacing: 2)),
-                Text('Tap a routine to preview and add it to My Routines.',
-                    style: GoogleFonts.dmSans(color: IronMindTheme.text3, fontSize: 11)),
-              ]),
+      child: Column(
+        children: [
+          // Handle
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 6),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: IronMindTheme.border2,
+              borderRadius: BorderRadius.circular(2),
             ),
-            IconButton(
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close, size: 18),
-              color: IronMindTheme.text2,
-            ),
-          ]),
-        ),
-        // Category chips
-        SizedBox(
-          height: 44,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: _categories.length,
-            separatorBuilder: (context, i) => const SizedBox(width: 6),
-            itemBuilder: (_, i) {
-              final cat = _categories[i];
-              final selected = _selectedCategory == cat;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedCategory = cat),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: selected ? IronMindTheme.accent : IronMindTheme.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: selected ? IronMindTheme.accent : IronMindTheme.border2,
-                    ),
-                  ),
-                  child: Text(
-                    cat,
-                    style: GoogleFonts.dmMono(
-                      color: selected ? IronMindTheme.bg : IronMindTheme.text2,
-                      fontSize: 10,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'EXPLORE ROUTINES',
+                        style: GoogleFonts.bebasNeue(
+                          color: IronMindTheme.textPrimary,
+                          fontSize: 22,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      Text(
+                        'Tap a routine to preview and add it to My Routines.',
+                        style: GoogleFonts.dmSans(
+                          color: IronMindTheme.text3,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              );
-            },
-          ),
-        ),
-        // List
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
-            itemCount: _filtered.length,
-            itemBuilder: (_, i) {
-              final r = _filtered[i];
-              final alreadyAdded = _added.contains(r['name']);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _ExploreRoutineCard(
-                  routine: r,
-                  added: alreadyAdded,
-                  onAdd: alreadyAdded ? null : () async {
-                    await ApiService.saveRoutine({
-                      'name': r['name'],
-                      'exercises': List<String>.from(r['exercises'] as List),
-                      'primary': List<String>.from(r['primary'] as List),
-                      'secondary': List<String>.from(r['secondary'] as List),
-                    });
-                    setState(() => _added.add(r['name'] as String));
-                    widget.onAdded();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text('${r['name']} added to My Routines'),
-                        backgroundColor: IronMindTheme.green,
-                        duration: const Duration(seconds: 2),
-                      ));
-                    }
-                  },
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, size: 18),
+                  color: IronMindTheme.text2,
                 ),
-              );
-            },
+              ],
+            ),
           ),
-        ),
-      ]),
+          // Category chips
+          SizedBox(
+            height: 44,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: _categories.length,
+              separatorBuilder: (context, i) => const SizedBox(width: 6),
+              itemBuilder: (_, i) {
+                final cat = _categories[i];
+                final selected = _selectedCategory == cat;
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedCategory = cat),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? IronMindTheme.accent
+                          : IronMindTheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: selected
+                            ? IronMindTheme.accent
+                            : IronMindTheme.border2,
+                      ),
+                    ),
+                    child: Text(
+                      cat,
+                      style: GoogleFonts.dmMono(
+                        color: selected
+                            ? IronMindTheme.bg
+                            : IronMindTheme.text2,
+                        fontSize: 10,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          // List
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+              itemCount: _filtered.length,
+              itemBuilder: (_, i) {
+                final r = _filtered[i];
+                final alreadyAdded = _added.contains(r['name']);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _ExploreRoutineCard(
+                    routine: r,
+                    added: alreadyAdded,
+                    onAdd: alreadyAdded
+                        ? null
+                        : () async {
+                            await ApiService.saveRoutine({
+                              'name': r['name'],
+                              'exercises': List<String>.from(
+                                r['exercises'] as List,
+                              ),
+                              'primary': List<String>.from(
+                                r['primary'] as List,
+                              ),
+                              'secondary': List<String>.from(
+                                r['secondary'] as List,
+                              ),
+                            });
+                            setState(() => _added.add(r['name'] as String));
+                            widget.onAdded();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '${r['name']} added to My Routines',
+                                  ),
+                                  backgroundColor: IronMindTheme.green,
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          },
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -4406,7 +4852,11 @@ class _ExploreRoutineCard extends StatelessWidget {
   final bool added;
   final VoidCallback? onAdd;
 
-  const _ExploreRoutineCard({required this.routine, required this.added, required this.onAdd});
+  const _ExploreRoutineCard({
+    required this.routine,
+    required this.added,
+    required this.onAdd,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -4421,78 +4871,116 @@ class _ExploreRoutineCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: IronMindTheme.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
-                routine['name'] ?? '',
-                style: GoogleFonts.bebasNeue(color: IronMindTheme.textPrimary, fontSize: 16, letterSpacing: 1.2),
-              ),
-              const SizedBox(height: 2),
-              Row(children: [
-                IronBadge(routine['difficulty'] ?? '', color: IronMindTheme.accent),
-                const SizedBox(width: 6),
-                IronBadge(routine['days'] ?? '', color: IronMindTheme.text3),
-              ]),
-            ]),
-          ),
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: onAdd,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: added
-                    ? IronMindTheme.green.withValues(alpha: 0.12)
-                    : IronMindTheme.accentDim,
-                borderRadius: BorderRadius.circular(7),
-                border: Border.all(
-                  color: added
-                      ? IronMindTheme.green.withValues(alpha: 0.4)
-                      : IronMindTheme.accent.withValues(alpha: 0.4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      routine['name'] ?? '',
+                      style: GoogleFonts.bebasNeue(
+                        color: IronMindTheme.textPrimary,
+                        fontSize: 16,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        IronBadge(
+                          routine['difficulty'] ?? '',
+                          color: IronMindTheme.accent,
+                        ),
+                        const SizedBox(width: 6),
+                        IronBadge(
+                          routine['days'] ?? '',
+                          color: IronMindTheme.text3,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(
-                  added ? Icons.check : Icons.add,
-                  size: 12,
-                  color: added ? IronMindTheme.green : IronMindTheme.accent,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  added ? 'ADDED' : 'ADD',
-                  style: GoogleFonts.dmMono(
-                    color: added ? IronMindTheme.green : IronMindTheme.accent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
+              const SizedBox(width: 10),
+              GestureDetector(
+                onTap: onAdd,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: added
+                        ? IronMindTheme.green.withValues(alpha: 0.12)
+                        : IronMindTheme.accentDim,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(
+                      color: added
+                          ? IronMindTheme.green.withValues(alpha: 0.4)
+                          : IronMindTheme.accent.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        added ? Icons.check : Icons.add,
+                        size: 12,
+                        color: added
+                            ? IronMindTheme.green
+                            : IronMindTheme.accent,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        added ? 'ADDED' : 'ADD',
+                        style: GoogleFonts.dmMono(
+                          color: added
+                              ? IronMindTheme.green
+                              : IronMindTheme.accent,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            routine['description'] ?? '',
+            style: GoogleFonts.dmSans(
+              color: IronMindTheme.text2,
+              fontSize: 11,
+              height: 1.4,
             ),
           ),
-        ]),
-        const SizedBox(height: 8),
-        Text(
-          routine['description'] ?? '',
-          style: GoogleFonts.dmSans(color: IronMindTheme.text2, fontSize: 11, height: 1.4),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          exercises.join(' · '),
-          style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        if (primary.isNotEmpty) ...[
           const SizedBox(height: 8),
-          Wrap(spacing: 4, runSpacing: 4, children: [
-            ...primary.map((m) => MuscleTag(m, primary: true)),
-            ...secondary.map((m) => MuscleTag(m, primary: false)),
-          ]),
+          Text(
+            exercises.join(' · '),
+            style: GoogleFonts.dmMono(color: IronMindTheme.text3, fontSize: 9),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (primary.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                ...primary.map((m) => MuscleTag(m, primary: true)),
+                ...secondary.map((m) => MuscleTag(m, primary: false)),
+              ],
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
@@ -4721,7 +5209,9 @@ class _BarOptionTile extends StatelessWidget {
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: IronMindTheme.surface2,
                             borderRadius: BorderRadius.circular(4),
@@ -4761,8 +5251,11 @@ class _BarOptionTile extends StatelessWidget {
             if (selected)
               const Padding(
                 padding: EdgeInsets.only(left: 10, top: 2),
-                child: Icon(Icons.check_circle_rounded,
-                    color: IronMindTheme.accent, size: 18),
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  color: IronMindTheme.accent,
+                  size: 18,
+                ),
               ),
           ],
         ),
@@ -4793,8 +5286,20 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
   late BarType? _barType;
   double _pct = 0.80;
 
-  static const _pctSteps = [0.50, 0.575, 0.60, 0.65, 0.70, 0.75, 0.80,
-    0.85, 0.875, 0.90, 0.925, 0.95];
+  static const _pctSteps = [
+    0.50,
+    0.575,
+    0.60,
+    0.65,
+    0.70,
+    0.75,
+    0.80,
+    0.85,
+    0.875,
+    0.90,
+    0.925,
+    0.95,
+  ];
 
   @override
   void initState() {
@@ -4808,13 +5313,16 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
       final prs = await ApiService.getPRList();
       final key = widget.exerciseName.trim().toLowerCase();
       final matches = prs.where(
-          (p) => (p['exercise'] as String? ?? '').toLowerCase() == key);
+        (p) => (p['exercise'] as String? ?? '').toLowerCase() == key,
+      );
       if (matches.isNotEmpty) {
         final m = matches.first;
-        final e1rm = (m['estimated_1rm'] as num?)?.toDouble()
-            ?? ApiService.calculate1RM(
-                (m['weight'] as num?)?.toDouble() ?? 0,
-                (m['reps'] as num?)?.toInt() ?? 1);
+        final e1rm =
+            (m['estimated_1rm'] as num?)?.toDouble() ??
+            ApiService.calculate1RM(
+              (m['weight'] as num?)?.toDouble() ?? 0,
+              (m['reps'] as num?)?.toInt() ?? 1,
+            );
         if (mounted) setState(() => _est1rm = e1rm);
       }
     } catch (_) {}
@@ -4827,7 +5335,11 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
   double get _targetWeight =>
       _est1rm != null ? _roundToNearest(_est1rm! * _pct, 2.5) : 0;
 
-  double get _plates => (_targetWeight - _barWeight).clamp(0, double.infinity);
+  void _adjustTarget(double delta) {
+    if (_est1rm == null || _est1rm! <= 0) return;
+    final next = (_targetWeight + delta).clamp(_barWeight, _est1rm! * 1.05);
+    setState(() => _pct = (next / _est1rm!).clamp(0.50, 1.05));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4844,7 +5356,8 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
           children: [
             const SizedBox(height: 10),
             Container(
-              width: 36, height: 4,
+              width: 36,
+              height: 4,
               decoration: BoxDecoration(
                 color: IronMindTheme.border,
                 borderRadius: BorderRadius.circular(2),
@@ -4855,14 +5368,23 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
                 controller: ctrl,
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                 children: [
-                  Text('LOAD CALCULATOR', style: GoogleFonts.dmMono(
-                    color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1.5)),
+                  Text(
+                    'LOAD CALCULATOR',
+                    style: GoogleFonts.dmMono(
+                      color: IronMindTheme.text3,
+                      fontSize: 9,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
                   Text(
                     widget.exerciseName.isNotEmpty
                         ? widget.exerciseName
                         : 'Exercise',
                     style: GoogleFonts.bebasNeue(
-                      color: IronMindTheme.textPrimary, fontSize: 24, letterSpacing: 1.5),
+                      color: IronMindTheme.textPrimary,
+                      fontSize: 24,
+                      letterSpacing: 1.5,
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -4879,50 +5401,81 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
                       child: Text(
                         'No PR found for this exercise. Log a set to auto-calculate, or record a PR manually.',
                         style: GoogleFonts.dmSans(
-                          color: IronMindTheme.text2, fontSize: 12, height: 1.5),
+                          color: IronMindTheme.text2,
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
                       ),
                     )
                   else ...[
                     // e1RM badge
-                    Row(children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: IronMindTheme.green.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: IronMindTheme.green.withValues(alpha: 0.3)),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: IronMindTheme.green.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: IronMindTheme.green.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                'e1RM',
+                                style: GoogleFonts.dmMono(
+                                  color: IronMindTheme.text3,
+                                  fontSize: 8,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              Text(
+                                '${_est1rm!.round()} lb',
+                                style: GoogleFonts.bebasNeue(
+                                  color: IronMindTheme.green,
+                                  fontSize: 22,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Column(children: [
-                          Text('e1RM', style: GoogleFonts.dmMono(
-                            color: IronMindTheme.text3, fontSize: 8, letterSpacing: 1)),
-                          Text('${_est1rm!.round()} lb', style: GoogleFonts.bebasNeue(
-                            color: IronMindTheme.green, fontSize: 22)),
-                        ]),
-                      ),
-                    ]),
+                      ],
+                    ),
                     const SizedBox(height: 20),
 
                     // Bar type selector row
-                    Text('BAR', style: GoogleFonts.dmMono(
-                      color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1.5)),
+                    Text(
+                      'BAR',
+                      style: GoogleFonts.dmMono(
+                        color: IronMindTheme.text3,
+                        fontSize: 9,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
-                      child: Row(children: [
-                        _CalcBarChip(
-                          label: 'Stiff 45',
-                          selected: _barType == null,
-                          onTap: () => setState(() => _barType = null),
-                        ),
-                        ...BarType.values.map((t) {
-                          final s = barSpecFor(t);
-                          return _CalcBarChip(
-                            label: '${s.shortName} ${s.weightLb.toInt()}',
-                            selected: _barType == t,
-                            onTap: () => setState(() => _barType = t),
-                          );
-                        }),
-                      ]),
+                      child: Row(
+                        children: [
+                          _CalcBarChip(
+                            label: 'Stiff 45',
+                            selected: _barType == null,
+                            onTap: () => setState(() => _barType = null),
+                          ),
+                          ...BarType.values.map((t) {
+                            final s = barSpecFor(t);
+                            return _CalcBarChip(
+                              label: '${s.shortName} ${s.weightLb.toInt()}',
+                              selected: _barType == t,
+                              onTap: () => setState(() => _barType = t),
+                            );
+                          }),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 20),
 
@@ -4930,11 +5483,21 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('INTENSITY', style: GoogleFonts.dmMono(
-                          color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1.5)),
-                        Text('${(_pct * 100).toStringAsFixed(1)}%',
+                        Text(
+                          'INTENSITY',
+                          style: GoogleFonts.dmMono(
+                            color: IronMindTheme.text3,
+                            fontSize: 9,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        Text(
+                          '${(_pct * 100).toStringAsFixed(1)}%',
                           style: GoogleFonts.bebasNeue(
-                            color: IronMindTheme.accent, fontSize: 20)),
+                            color: IronMindTheme.accent,
+                            fontSize: 20,
+                          ),
+                        ),
                       ],
                     ),
                     SliderTheme(
@@ -4942,9 +5505,13 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
                         activeTrackColor: IronMindTheme.accent,
                         inactiveTrackColor: IronMindTheme.border2,
                         thumbColor: IronMindTheme.accent,
-                        overlayColor: IronMindTheme.accent.withValues(alpha: 0.1),
+                        overlayColor: IronMindTheme.accent.withValues(
+                          alpha: 0.1,
+                        ),
                         trackHeight: 3,
-                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 8,
+                        ),
                       ),
                       child: Slider(
                         min: 0.50,
@@ -4963,27 +5530,73 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
                         color: IronMindTheme.accent.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: IronMindTheme.accent.withValues(alpha: 0.3)),
+                          color: IronMindTheme.accent.withValues(alpha: 0.3),
+                        ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      child: Column(
                         children: [
-                          _ResultCell('TOTAL', '${_targetWeight.toInt()} lb',
-                            IronMindTheme.textPrimary),
-                          Container(width: 1, height: 40, color: IronMindTheme.border2),
-                          _ResultCell('BAR', '${_barWeight.toInt()} lb',
-                            IronMindTheme.text3),
-                          Container(width: 1, height: 40, color: IronMindTheme.border2),
-                          _ResultCell('PLATES', '${_plates.toInt()} lb',
-                            IronMindTheme.green),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _ResultCell(
+                                'TOTAL',
+                                '${_targetWeight.toInt()} lb',
+                                IronMindTheme.textPrimary,
+                              ),
+                              Container(
+                                width: 1,
+                                height: 40,
+                                color: IronMindTheme.border2,
+                              ),
+                              _ResultCell(
+                                'BAR',
+                                '${_barWeight.toInt()} lb',
+                                IronMindTheme.text3,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          LoadBarbell(
+                            totalWeight: _targetWeight,
+                            barWeight: _barWeight,
+                            color: IronMindTheme.accent,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            LoadBarbell.plateBreakdown(
+                              _targetWeight,
+                              _barWeight,
+                            ),
+                            style: GoogleFonts.dmMono(
+                              color: IronMindTheme.textPrimary,
+                              fontSize: 12,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'per side',
+                            style: GoogleFonts.dmSans(
+                              color: IronMindTheme.text3,
+                              fontSize: 10,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          LoadPlateAdjuster(onChanged: _adjustTarget),
                         ],
                       ),
                     ),
                     const SizedBox(height: 20),
 
                     // Quick-select percentage grid
-                    Text('QUICK SELECT', style: GoogleFonts.dmMono(
-                      color: IronMindTheme.text3, fontSize: 9, letterSpacing: 1.5)),
+                    Text(
+                      'QUICK SELECT',
+                      style: GoogleFonts.dmMono(
+                        color: IronMindTheme.text3,
+                        fontSize: 9,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -4995,7 +5608,9 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
                           onTap: () => setState(() => _pct = p),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 7),
+                              horizontal: 10,
+                              vertical: 7,
+                            ),
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? IronMindTheme.accent.withValues(alpha: 0.12)
@@ -5007,20 +5622,28 @@ class _LoadCalcSheetState extends State<_LoadCalcSheet> {
                                     : IronMindTheme.border2,
                               ),
                             ),
-                            child: Column(children: [
-                              Text('${(p * 100).toStringAsFixed(p * 100 == (p * 100).roundToDouble() ? 0 : 1)}%',
-                                style: GoogleFonts.dmMono(
-                                  color: isSelected
-                                      ? IronMindTheme.accent
-                                      : IronMindTheme.text2,
-                                  fontSize: 10)),
-                              Text('${w.toInt()} lb',
-                                style: GoogleFonts.bebasNeue(
-                                  color: isSelected
-                                      ? IronMindTheme.textPrimary
-                                      : IronMindTheme.text3,
-                                  fontSize: 14)),
-                            ]),
+                            child: Column(
+                              children: [
+                                Text(
+                                  '${(p * 100).toStringAsFixed(p * 100 == (p * 100).roundToDouble() ? 0 : 1)}%',
+                                  style: GoogleFonts.dmMono(
+                                    color: isSelected
+                                        ? IronMindTheme.accent
+                                        : IronMindTheme.text2,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                Text(
+                                  '${w.toInt()} lb',
+                                  style: GoogleFonts.bebasNeue(
+                                    color: isSelected
+                                        ? IronMindTheme.textPrimary
+                                        : IronMindTheme.text3,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       }).toList(),
@@ -5045,8 +5668,14 @@ class _ResultCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      Text(label, style: GoogleFonts.dmMono(
-        color: IronMindTheme.text3, fontSize: 8, letterSpacing: 1)),
+      Text(
+        label,
+        style: GoogleFonts.dmMono(
+          color: IronMindTheme.text3,
+          fontSize: 8,
+          letterSpacing: 1,
+        ),
+      ),
       const SizedBox(height: 4),
       Text(value, style: GoogleFonts.bebasNeue(color: color, fontSize: 20)),
     ],
@@ -5057,7 +5686,11 @@ class _CalcBarChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  const _CalcBarChip({required this.label, required this.selected, required this.onTap});
+  const _CalcBarChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -5076,9 +5709,13 @@ class _CalcBarChip extends StatelessWidget {
           width: selected ? 1.5 : 1,
         ),
       ),
-      child: Text(label, style: GoogleFonts.dmMono(
-        color: selected ? IronMindTheme.accent : IronMindTheme.text2,
-        fontSize: 10)),
+      child: Text(
+        label,
+        style: GoogleFonts.dmMono(
+          color: selected ? IronMindTheme.accent : IronMindTheme.text2,
+          fontSize: 10,
+        ),
+      ),
     ),
   );
 }
@@ -5123,10 +5760,12 @@ class _SchemePickerSheetState extends State<_SchemePickerSheet>
       );
       if (matches.isNotEmpty) {
         final match = matches.first;
-        final e1rm = (match['estimated_1rm'] as num?)?.toDouble()
-            ?? ApiService.calculate1RM(
-                (match['weight'] as num?)?.toDouble() ?? 0,
-                (match['reps'] as num?)?.toInt() ?? 1);
+        final e1rm =
+            (match['estimated_1rm'] as num?)?.toDouble() ??
+            ApiService.calculate1RM(
+              (match['weight'] as num?)?.toDouble() ?? 0,
+              (match['reps'] as num?)?.toInt() ?? 1,
+            );
         if (mounted) setState(() => _est1rm = e1rm);
       }
     } catch (_) {}
@@ -5189,12 +5828,15 @@ class _SchemePickerSheetState extends State<_SchemePickerSheet>
                   if (!_loadingPr && _est1rm != null)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: IronMindTheme.green.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: IronMindTheme.green.withValues(alpha: 0.3)),
+                          color: IronMindTheme.green.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: Column(
                         children: [
@@ -5320,7 +5962,9 @@ class _SchemeList extends StatelessWidget {
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: IronMindTheme.surface2,
                               borderRadius: BorderRadius.circular(4),
@@ -5371,13 +6015,15 @@ class _SchemeList extends StatelessWidget {
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: IronMindTheme.accent.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                            color:
-                                IronMindTheme.accent.withValues(alpha: 0.3)),
+                          color: IronMindTheme.accent.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: Text(
                         'APPLY',

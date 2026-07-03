@@ -48,6 +48,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _loading = true;
   bool _saving = false;
   int _step = 0;
+  String _activeCurrentLift = 'squat';
+  String _activeGoalLift = 'squat';
 
   static const List<String> _equipmentOptions = [
     'Barbell',
@@ -71,7 +73,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   static const List<int> _heightFeetOptions = [4, 5, 6, 7];
   static const List<int> _heightInchOptions = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
   ];
 
   static const List<_ChoiceOption> _experienceOptions = [
@@ -131,28 +144,45 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   static const List<_OnboardingStepMeta> _steps = [
     _OnboardingStepMeta(
       title: 'Who Are You?',
-      subtitle: 'Your name and goal — the two things that shape every recommendation in the app.',
-      kicker: 'STEP 1 OF 5',
+      subtitle:
+          'Start with the basics so IronMind feels like your training log, not a blank template.',
+      kicker: 'STEP 1 OF 7',
     ),
     _OnboardingStepMeta(
       title: 'Your Body',
-      subtitle: 'Weight and height anchor your progress tracking and relative strength calculations.',
-      kicker: 'STEP 2 OF 5',
+      subtitle:
+          'Weight and height anchor your progress tracking and relative strength calculations.',
+      kicker: 'STEP 2 OF 7',
     ),
     _OnboardingStepMeta(
-      title: 'Your Lifts',
-      subtitle: 'Current 1RMs power the load calculator, scheme suggestions, and PR board from day one.',
-      kicker: 'STEP 3 OF 5',
+      title: 'Training Goal',
+      subtitle:
+          'Choose the outcome this phase should prioritize before we tune the training details.',
+      kicker: 'STEP 3 OF 7',
+    ),
+    _OnboardingStepMeta(
+      title: 'Current Maxes',
+      subtitle:
+          'Current 1RMs power the load calculator, scheme suggestions, and PR board from day one.',
+      kicker: 'STEP 4 OF 7',
+    ),
+    _OnboardingStepMeta(
+      title: 'Goal Maxes',
+      subtitle:
+          'Now load the bar you are chasing. These targets drive dashboard progress.',
+      kicker: 'STEP 5 OF 7',
     ),
     _OnboardingStepMeta(
       title: 'Training Setup',
-      subtitle: 'Experience, frequency, and equipment shape your program structure and intensity.',
-      kicker: 'STEP 4 OF 5',
+      subtitle:
+          'Experience, frequency, and equipment shape your program structure and intensity.',
+      kicker: 'STEP 6 OF 7',
     ),
     _OnboardingStepMeta(
       title: 'Your Program',
-      subtitle: 'Here\'s what IronMind built from your answers — ready to train.',
-      kicker: 'STEP 5 OF 5',
+      subtitle:
+          'Here\'s what IronMind built from your answers - ready to train.',
+      kicker: 'STEP 7 OF 7',
     ),
   ];
 
@@ -253,15 +283,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     current['equipment'] = _fullGymAccess
         ? List<String>.from(_equipmentOptions)
         : _equipment.toList();
-    current['squat'] = _squatController.text.trim();
-    current['bench'] = _benchController.text.trim();
-    current['deadlift'] = _deadliftController.text.trim();
-    current['ohp'] = _ohpController.text.trim();
-    current['currentSquat'] = double.tryParse(_squatController.text.trim()) ?? 0;
-    current['currentBench'] = double.tryParse(_benchController.text.trim()) ?? 0;
-    current['currentDeadlift'] =
-        double.tryParse(_deadliftController.text.trim()) ?? 0;
-    current['currentOhp'] = double.tryParse(_ohpController.text.trim()) ?? 0;
+    final squat = _liftValue('squat', target: false);
+    final bench = _liftValue('bench', target: false);
+    final deadlift = _liftValue('deadlift', target: false);
+    final ohp = _liftValue('ohp', target: false);
+    current['squat'] = '$squat';
+    current['bench'] = '$bench';
+    current['deadlift'] = '$deadlift';
+    current['ohp'] = '$ohp';
+    current['currentSquat'] = squat.toDouble();
+    current['currentBench'] = bench.toDouble();
+    current['currentDeadlift'] = deadlift.toDouble();
+    current['currentOhp'] = ohp.toDouble();
 
     // Save avatar image to app documents directory
     if (_profileImageFile != null) {
@@ -286,10 +319,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await ApiService.logBodyweight(bwValue);
     }
     await ApiService.saveStrengthGoals({
-      'squat': int.tryParse(_goalSquatController.text.trim()) ?? 315,
-      'bench': int.tryParse(_goalBenchController.text.trim()) ?? 225,
-      'deadlift': int.tryParse(_goalDeadliftController.text.trim()) ?? 405,
-      'ohp': int.tryParse(_goalOhpController.text.trim()) ?? 135,
+      'squat': _liftValue('squat', target: true),
+      'bench': _liftValue('bench', target: true),
+      'deadlift': _liftValue('deadlift', target: true),
+      'ohp': _liftValue('ohp', target: true),
     });
     await ApiService.completeOnboarding();
     await widget.onComplete();
@@ -298,10 +331,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String? _validateCurrentStep() {
     switch (_step) {
       case 0:
-        if (_nameController.text.trim().isEmpty) return 'Enter your name to continue.';
+        if (_nameController.text.trim().isEmpty) {
+          return 'Enter your name to continue.';
+        }
       case 1:
-        if (_currentWeightController.text.trim().isEmpty) return 'Enter your current weight to continue.';
-        if (double.tryParse(_currentWeightController.text.trim()) == null) return 'Enter a valid weight (e.g. 185).';
+        if (_currentWeightController.text.trim().isEmpty) {
+          return 'Enter your current weight to continue.';
+        }
+        if (double.tryParse(_currentWeightController.text.trim()) == null) {
+          return 'Enter a valid weight (e.g. 185).';
+        }
         if (_targetWeightController.text.trim().isNotEmpty &&
             double.tryParse(_targetWeightController.text.trim()) == null) {
           return 'Enter a valid target weight (e.g. 175).';
@@ -319,7 +358,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           content: Text(error, style: GoogleFonts.dmSans(fontSize: 13)),
           backgroundColor: IronMindColors.surfaceElevated,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         ),
       );
@@ -419,7 +460,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               onPressed: _saving ? null : _previousStep,
                               child: Text(
                                 'BACK',
-                                style: GoogleFonts.bebasNeue(letterSpacing: 1.4),
+                                style: GoogleFonts.bebasNeue(
+                                  letterSpacing: 1.4,
+                                ),
                               ),
                             ),
                           ),
@@ -464,38 +507,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     switch (_experience) {
       case 'beginner':
-        scheme = '5×5';
-        zone = '65–75% 1RM';
+        scheme = '5x5';
+        zone = '65-75% 1RM';
         progression = 'Add 5 lb per session (linear progression)';
         break;
       case 'advanced':
-        scheme = '5/3/1 or 5×3';
-        zone = '80–90% 1RM';
+        scheme = '5/3/1 or 5x3';
+        zone = '80-90% 1RM';
         progression = 'Weekly undulation, deload every 4th week';
         break;
       case 'elite':
         scheme = 'Wave loading (5-3-1)';
-        zone = '85–95% 1RM';
+        zone = '85-95% 1RM';
         progression = 'Percentage-based mesocycle blocks';
         break;
       default: // intermediate
-        scheme = '4×6 or 5×5';
-        zone = '75–85% 1RM';
-        progression = 'Add weight every 1–2 sessions';
+        scheme = '4x6 or 5x5';
+        zone = '75-85% 1RM';
+        progression = 'Add weight every 1-2 sessions';
     }
 
     switch (_goal) {
       case 'peak-strength':
-        style = 'Powerlifting — low rep, heavy compound focus';
+        style = 'Powerlifting - low rep, heavy compound focus';
         break;
       case 'hypertrophy':
-        style = 'Powerbuilding — strength base with hypertrophy volume';
+        style = 'Powerbuilding - strength base with hypertrophy volume';
         break;
       case 'lose-fat':
         style = 'Strength + conditioning hybrid';
         break;
       default:
-        style = 'General strength — balanced compound work';
+        style = 'General strength - balanced compound work';
     }
 
     return {
@@ -508,92 +551,73 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Widget _buildStepContent() {
     switch (_step) {
-      // ── Step 0: Who Are You + Goal ──────────────────────────────────────────
+      // Step 0: Who Are You
       case 0:
         return SingleChildScrollView(
           child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _nameController,
-              textCapitalization: TextCapitalization.words,
-              textInputAction: TextInputAction.done,
-              style: GoogleFonts.dmSans(color: IronMindColors.textPrimary),
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                hintText: 'What should IronMind call you?',
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _nameController,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.done,
+                style: GoogleFonts.dmSans(color: IronMindColors.textPrimary),
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  hintText: 'What should IronMind call you?',
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Birth Date',
-              style: GoogleFonts.dmSans(
-                color: IronMindColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+              const SizedBox(height: 18),
+              Text(
+                'Birth Date',
+                style: GoogleFonts.dmSans(
+                  color: IronMindColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            GestureDetector(
-              onTap: _pickBirthDate,
-              child: AbsorbPointer(
-                child: TextField(
-                  controller: TextEditingController(
-                    text: _formattedBirthDate(),
-                  ),
-                  style: GoogleFonts.dmSans(
-                    color: IronMindColors.textPrimary,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Birth Date',
-                    hintText: 'Select your birth date',
-                    suffixIcon: const Icon(Icons.calendar_today_outlined),
-                    helperText: _birthDate == null
-                        ? null
-                        : 'Age: ${_calculatedAge()}',
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: _pickBirthDate,
+                child: AbsorbPointer(
+                  child: TextField(
+                    controller: TextEditingController(
+                      text: _formattedBirthDate(),
+                    ),
+                    style: GoogleFonts.dmSans(
+                      color: IronMindColors.textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Birth Date',
+                      hintText: 'Select your birth date',
+                      suffixIcon: const Icon(Icons.calendar_today_outlined),
+                      helperText: _birthDate == null
+                          ? null
+                          : 'Age: ${_calculatedAge()}',
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Gender',
-              style: GoogleFonts.dmSans(
-                color: IronMindColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+              const SizedBox(height: 18),
+              Text(
+                'Gender',
+                style: GoogleFonts.dmSans(
+                  color: IronMindColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            _SegmentedPicker(
-              options: const ['Male', 'Female', 'Other'],
-              selected: _gender,
-              onChanged: (value) => setState(() => _gender = value),
-            ),
-            const SizedBox(height: 24),
-            Text('TRAINING GOAL',
-              style: GoogleFonts.dmMono(
-                color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.5)),
-            const SizedBox(height: 4),
-            Text('Choose the outcome this phase should prioritize.',
-              style: GoogleFonts.dmSans(
-                color: IronMindColors.textSecondary, fontSize: 12, height: 1.4)),
-            const SizedBox(height: 12),
-            ..._goalOptions.map((option) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _SelectionCard(
-                title: option.title,
-                subtitle: option.subtitle,
-                icon: option.icon,
-                selected: _goal == option.value,
-                onTap: () => setState(() => _goal = option.value),
+              const SizedBox(height: 8),
+              _SegmentedPicker(
+                options: const ['Male', 'Female', 'Other'],
+                selected: _gender,
+                onChanged: (value) => setState(() => _gender = value),
               ),
-            )),
-          ],
-        ),
-      );
+            ],
+          ),
+        );
 
-      // ── Step 1: Your Body ─────────────────────────────────────────────────
+      // Step 1: Your Body
       case 1:
         return SingleChildScrollView(
           child: Column(
@@ -605,29 +629,34 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 suffixText: 'lbs',
               ),
               const SizedBox(height: 14),
-              Row(children: [
-                Expanded(
-                  child: _HeightDropdown(
-                    label: 'Height',
-                    value: int.tryParse(_heightFeetController.text),
-                    items: _heightFeetOptions,
-                    suffix: 'ft',
-                    onChanged: (v) => setState(
-                        () => _heightFeetController.text = v?.toString() ?? ''),
+              Row(
+                children: [
+                  Expanded(
+                    child: _HeightDropdown(
+                      label: 'Height',
+                      value: int.tryParse(_heightFeetController.text),
+                      items: _heightFeetOptions,
+                      suffix: 'ft',
+                      onChanged: (v) => setState(
+                        () => _heightFeetController.text = v?.toString() ?? '',
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _HeightDropdown(
-                    label: 'Inches',
-                    value: int.tryParse(_heightInchesController.text),
-                    items: _heightInchOptions,
-                    suffix: 'in',
-                    onChanged: (v) => setState(
-                        () => _heightInchesController.text = v?.toString() ?? ''),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _HeightDropdown(
+                      label: 'Inches',
+                      value: int.tryParse(_heightInchesController.text),
+                      items: _heightInchOptions,
+                      suffix: 'in',
+                      onChanged: (v) => setState(
+                        () =>
+                            _heightInchesController.text = v?.toString() ?? '',
+                      ),
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
               const SizedBox(height: 14),
               _LiftField(
                 label: 'Target Weight (optional)',
@@ -638,7 +667,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               Text(
                 'Used to track cutting / bulking progress on your dashboard.',
                 style: GoogleFonts.dmSans(
-                  color: IronMindColors.textMuted, fontSize: 11),
+                  color: IronMindColors.textMuted,
+                  fontSize: 11,
+                ),
               ),
               const SizedBox(height: 24),
               // Optional photo inline
@@ -649,131 +680,174 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: IronMindColors.border),
                 ),
-                child: Row(children: [
-                  GestureDetector(
-                    onTap: _showImageSourceSheet,
-                    child: CircleAvatar(
-                      radius: 28,
-                      backgroundColor: IronMindColors.surface,
-                      backgroundImage: _profileImageFile != null
-                          ? FileImage(_profileImageFile!)
-                          : (_existingAvatarPath != null
-                              ? FileImage(File(_existingAvatarPath!))
-                              : null) as ImageProvider?,
-                      child: (_profileImageFile == null && _existingAvatarPath == null)
-                          ? Icon(Icons.add_a_photo_outlined,
-                              color: IronMindColors.textMuted, size: 22)
-                          : null,
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _showImageSourceSheet,
+                      child: CircleAvatar(
+                        radius: 28,
+                        backgroundColor: IronMindColors.surface,
+                        backgroundImage: _profileImageFile != null
+                            ? FileImage(_profileImageFile!)
+                            : (_existingAvatarPath != null
+                                      ? FileImage(File(_existingAvatarPath!))
+                                      : null)
+                                  as ImageProvider?,
+                        child:
+                            (_profileImageFile == null &&
+                                _existingAvatarPath == null)
+                            ? Icon(
+                                Icons.add_a_photo_outlined,
+                                color: IronMindColors.textMuted,
+                                size: 22,
+                              )
+                            : null,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Profile Photo',
-                          style: GoogleFonts.dmSans(
-                            color: IronMindColors.textPrimary,
-                            fontSize: 13, fontWeight: FontWeight.w600)),
-                        Text('Optional — tap to add or skip.',
-                          style: GoogleFonts.dmSans(
-                            color: IronMindColors.textMuted, fontSize: 11)),
-                      ],
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Profile Photo',
+                            style: GoogleFonts.dmSans(
+                              color: IronMindColors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            'Optional - tap to add or skip.',
+                            style: GoogleFonts.dmSans(
+                              color: IronMindColors.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ]),
+                  ],
+                ),
               ),
             ],
           ),
         );
 
-      // ── Step 2: Your Lifts ────────────────────────────────────────────────
+      // Step 2: Training Goal
       case 2:
         return SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: IronMindColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: IronMindColors.border),
-                ),
-                child: Text(
-                  'Enter your best 1-rep max. Don\'t know it? Enter your heaviest recent set weight — the app estimates from there. You can always update later.',
-                  style: GoogleFonts.dmSans(
-                    color: IronMindColors.textSecondary,
-                    fontSize: 12, height: 1.45),
+              Text(
+                'TRAINING GOAL',
+                style: GoogleFonts.dmMono(
+                  color: IronMindColors.textMuted,
+                  fontSize: 9,
+                  letterSpacing: 1.5,
                 ),
               ),
-              const SizedBox(height: 16),
-              Text('CURRENT 1RM',
-                style: GoogleFonts.dmMono(
-                  color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.5)),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: _LiftField(label: 'Squat', controller: _squatController)),
-                const SizedBox(width: 12),
-                Expanded(child: _LiftField(label: 'Bench', controller: _benchController)),
-              ]),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(child: _LiftField(label: 'Deadlift', controller: _deadliftController)),
-                const SizedBox(width: 12),
-                Expanded(child: _LiftField(label: 'OHP', controller: _ohpController)),
-              ]),
-              const SizedBox(height: 20),
-              const Divider(color: IronMindColors.border),
-              const SizedBox(height: 12),
-              Text('TARGET 1RM  (GOALS)',
-                style: GoogleFonts.dmMono(
-                  color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.5)),
-              const SizedBox(height: 6),
-              Text('The numbers you\'re chasing. Shown as progress bars on your dashboard.',
+              const SizedBox(height: 4),
+              Text(
+                'Pick the main outcome for this training block. You can change it later from profile.',
                 style: GoogleFonts.dmSans(
-                  color: IronMindColors.textMuted, fontSize: 11, height: 1.4)),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: _LiftField(label: 'Squat Goal', controller: _goalSquatController)),
-                const SizedBox(width: 12),
-                Expanded(child: _LiftField(label: 'Bench Goal', controller: _goalBenchController)),
-              ]),
+                  color: IronMindColors.textSecondary,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
               const SizedBox(height: 12),
-              Row(children: [
-                Expanded(child: _LiftField(label: 'DL Goal', controller: _goalDeadliftController)),
-                const SizedBox(width: 12),
-                Expanded(child: _LiftField(label: 'OHP Goal', controller: _goalOhpController)),
-              ]),
+              ..._goalOptions.map(
+                (option) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _SelectionCard(
+                    title: option.title,
+                    subtitle: option.subtitle,
+                    icon: option.icon,
+                    selected: _goal == option.value,
+                    onTap: () => setState(() => _goal = option.value),
+                  ),
+                ),
+              ),
             ],
           ),
         );
 
-      // ── Step 3: Training Setup ────────────────────────────────────────────
       case 3:
+        return SingleChildScrollView(
+          child: _BarbellLiftInput(
+            title: 'CURRENT 1RM',
+            helper:
+                'Pick a lift, then load the bar to match your current best single or closest estimate.',
+            activeLift: _activeCurrentLift,
+            values: {
+              'squat': _liftValue('squat', target: false),
+              'bench': _liftValue('bench', target: false),
+              'deadlift': _liftValue('deadlift', target: false),
+              'ohp': _liftValue('ohp', target: false),
+            },
+            onLiftSelected: (lift) => setState(() => _activeCurrentLift = lift),
+            onWeightChanged: (weight) => setState(
+              () => _setLiftValue(_activeCurrentLift, weight, target: false),
+            ),
+          ),
+        );
+
+      case 4:
+        return SingleChildScrollView(
+          child: _BarbellLiftInput(
+            title: 'GOAL 1RM',
+            helper:
+                'Load the bar you want to own. These targets become your strength progress goals.',
+            activeLift: _activeGoalLift,
+            values: {
+              'squat': _liftValue('squat', target: true),
+              'bench': _liftValue('bench', target: true),
+              'deadlift': _liftValue('deadlift', target: true),
+              'ohp': _liftValue('ohp', target: true),
+            },
+            onLiftSelected: (lift) => setState(() => _activeGoalLift = lift),
+            onWeightChanged: (weight) => setState(
+              () => _setLiftValue(_activeGoalLift, weight, target: true),
+            ),
+          ),
+        );
+
+      // Step 5: Training Setup
+      case 5:
         return SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('EXPERIENCE LEVEL',
+              Text(
+                'EXPERIENCE LEVEL',
                 style: GoogleFonts.dmMono(
-                  color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.5)),
-              const SizedBox(height: 8),
-              ..._experienceOptions.map((option) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _SelectionCard(
-                  title: option.title,
-                  subtitle: option.subtitle,
-                  icon: option.icon,
-                  selected: _experience == option.value,
-                  onTap: () => setState(() => _experience = option.value),
+                  color: IronMindColors.textMuted,
+                  fontSize: 9,
+                  letterSpacing: 1.5,
                 ),
-              )),
+              ),
+              const SizedBox(height: 8),
+              ..._experienceOptions.map(
+                (option) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _SelectionCard(
+                    title: option.title,
+                    subtitle: option.subtitle,
+                    icon: option.icon,
+                    selected: _experience == option.value,
+                    onTap: () => setState(() => _experience = option.value),
+                  ),
+                ),
+              ),
               const SizedBox(height: 16),
               _SliderField(
                 label: 'Training Days / Week',
                 value: _trainingDays,
-                min: 2, max: 7, divisions: 5,
+                min: 2,
+                max: 7,
+                divisions: 5,
                 suffix: '${_trainingDays.round()} days',
                 onChanged: (v) => setState(() => _trainingDays = v),
               ),
@@ -781,23 +855,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               _SliderField(
                 label: 'Session Length',
                 value: _sessionLength,
-                min: 30, max: 120, divisions: 6,
+                min: 30,
+                max: 120,
+                divisions: 6,
                 suffix: '${_sessionLength.round()} min',
                 onChanged: (v) => setState(() => _sessionLength = v),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: _style,
+                initialValue: _style,
                 dropdownColor: IronMindColors.surface,
                 decoration: const InputDecoration(labelText: 'Training Style'),
-                items: _trainingStyleOptions.map((o) =>
-                  DropdownMenuItem(value: o.value, child: Text(o.label))).toList(),
-                onChanged: (v) { if (v != null) setState(() => _style = v); },
+                items: _trainingStyleOptions
+                    .map(
+                      (o) => DropdownMenuItem(
+                        value: o.value,
+                        child: Text(o.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _style = v);
+                },
               ),
               const SizedBox(height: 16),
-              Text('EQUIPMENT',
+              Text(
+                'EQUIPMENT',
                 style: GoogleFonts.dmMono(
-                  color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.5)),
+                  color: IronMindColors.textMuted,
+                  fontSize: 9,
+                  letterSpacing: 1.5,
+                ),
+              ),
               const SizedBox(height: 8),
               FilterChip(
                 label: const Text('Full Gym'),
@@ -824,13 +913,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               const SizedBox(height: 8),
               Wrap(
-                spacing: 8, runSpacing: 8,
+                spacing: 8,
+                runSpacing: 8,
                 children: _equipmentOptions.map((item) {
                   final sel = _equipment.contains(item);
                   return FilterChip(
                     label: Text(item),
                     selected: sel || _fullGymAccess,
-                    selectedColor: IronMindColors.accent.withValues(alpha: 0.18),
+                    selectedColor: IronMindColors.accent.withValues(
+                      alpha: 0.18,
+                    ),
                     checkmarkColor: IronMindColors.accent,
                     side: const BorderSide(color: IronMindColors.border),
                     labelStyle: GoogleFonts.dmSans(
@@ -842,7 +934,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     onSelected: (v) {
                       setState(() {
                         _fullGymAccess = false;
-                        if (v) { _equipment.add(item); } else { _equipment.remove(item); }
+                        if (v) {
+                          _equipment.add(item);
+                        } else {
+                          _equipment.remove(item);
+                        }
                       });
                     },
                   );
@@ -852,12 +948,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         );
 
-      // ── Step 4: Program Preview ───────────────────────────────────────────
-      case 4:
+      // Step 6: Program Preview
+      case 6:
         final preview = _buildProgramPreview();
-        final squat = double.tryParse(_squatController.text) ?? 0;
-        final bench = double.tryParse(_benchController.text) ?? 0;
-        final dead  = double.tryParse(_deadliftController.text) ?? 0;
+        final squat = _liftValue('squat', target: false).toDouble();
+        final bench = _liftValue('bench', target: false).toDouble();
+        final dead = _liftValue('deadlift', target: false).toDouble();
         final total = squat + bench + dead;
         return SingleChildScrollView(
           child: Column(
@@ -866,7 +962,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               Text(
                 'Based on your goal, strength, and setup, here\'s how IronMind will work for you from day one.',
                 style: GoogleFonts.dmSans(
-                  color: IronMindColors.textSecondary, fontSize: 13, height: 1.45),
+                  color: IronMindColors.textSecondary,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
               ),
               const SizedBox(height: 16),
               // Program card
@@ -876,19 +975,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   color: IronMindColors.accent.withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: IronMindColors.accent.withValues(alpha: 0.3)),
+                    color: IronMindColors.accent.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('YOUR PROGRAM',
+                    Text(
+                      'YOUR PROGRAM',
                       style: GoogleFonts.dmMono(
-                        color: IronMindColors.accent, fontSize: 9, letterSpacing: 1.5)),
+                        color: IronMindColors.accent,
+                        fontSize: 9,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
                     const SizedBox(height: 12),
-                    _PreviewRow(Icons.style_rounded, 'Style', preview['style']!),
-                    _PreviewRow(Icons.grid_view_rounded, 'Starting Scheme', preview['scheme']!),
-                    _PreviewRow(Icons.percent_rounded, 'Intensity Zone', preview['zone']!),
-                    _PreviewRow(Icons.trending_up_rounded, 'Progression', preview['progression']!),
+                    _PreviewRow(
+                      Icons.style_rounded,
+                      'Style',
+                      preview['style']!,
+                    ),
+                    _PreviewRow(
+                      Icons.grid_view_rounded,
+                      'Starting Scheme',
+                      preview['scheme']!,
+                    ),
+                    _PreviewRow(
+                      Icons.percent_rounded,
+                      'Intensity Zone',
+                      preview['zone']!,
+                    ),
+                    _PreviewRow(
+                      Icons.trending_up_rounded,
+                      'Progression',
+                      preview['progression']!,
+                    ),
                   ],
                 ),
               ),
@@ -907,16 +1028,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       _TotalCell('Squat', squat),
                       _TotalCell('Bench', bench),
                       _TotalCell('Deadlift', dead),
-                      Column(children: [
-                        Text('TOTAL', style: GoogleFonts.dmMono(
-                          color: IronMindColors.textMuted, fontSize: 8, letterSpacing: 1)),
-                        const SizedBox(height: 4),
-                        Text('${total.toInt()}',
-                          style: GoogleFonts.bebasNeue(
-                            color: IronMindColors.accent, fontSize: 22)),
-                        Text('lb', style: GoogleFonts.dmMono(
-                          color: IronMindColors.textMuted, fontSize: 8)),
-                      ]),
+                      Column(
+                        children: [
+                          Text(
+                            'TOTAL',
+                            style: GoogleFonts.dmMono(
+                              color: IronMindColors.textMuted,
+                              fontSize: 8,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${total.toInt()}',
+                            style: GoogleFonts.bebasNeue(
+                              color: IronMindColors.accent,
+                              fontSize: 22,
+                            ),
+                          ),
+                          Text(
+                            'lb',
+                            style: GoogleFonts.dmMono(
+                              color: IronMindColors.textMuted,
+                              fontSize: 8,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -932,18 +1070,35 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('FEATURES NOW ACTIVE',
+                    Text(
+                      'FEATURES NOW ACTIVE',
                       style: GoogleFonts.dmMono(
-                        color: IronMindColors.textMuted, fontSize: 9, letterSpacing: 1.5)),
+                        color: IronMindColors.textMuted,
+                        fontSize: 9,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
                     const SizedBox(height: 10),
-                    _FeatureRow(Icons.percent_rounded,
-                      'Load Calculator', 'Bar-aware % calc in every exercise card'),
-                    _FeatureRow(Icons.grid_view_rounded,
-                      'Scheme Picker', 'Pre-loaded with your goal and experience'),
-                    _FeatureRow(Icons.bar_chart_rounded,
-                      'Power Matrix', 'RPE chart + training zones on your PRs'),
-                    _FeatureRow(Icons.fitness_center_rounded,
-                      'Bar Library', 'Stiff bar, duffalo, SSB, trap bar + plate math'),
+                    _FeatureRow(
+                      Icons.percent_rounded,
+                      'Load Calculator',
+                      'Bar-aware % calc in every exercise card',
+                    ),
+                    _FeatureRow(
+                      Icons.grid_view_rounded,
+                      'Scheme Picker',
+                      'Pre-loaded with your goal and experience',
+                    ),
+                    _FeatureRow(
+                      Icons.bar_chart_rounded,
+                      'Power Matrix',
+                      'RPE chart + training zones on your PRs',
+                    ),
+                    _FeatureRow(
+                      Icons.fitness_center_rounded,
+                      'Bar Library',
+                      'Stiff bar, duffalo, SSB, trap bar + plate math',
+                    ),
                   ],
                 ),
               ),
@@ -1174,6 +1329,49 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return 'strength';
     }
   }
+
+  int _liftValue(String lift, {required bool target}) {
+    final controller = _liftController(lift, target: target);
+    final parsed = double.tryParse(controller.text.trim());
+    if (parsed == null || parsed <= 0) {
+      return target ? _defaultGoalValue(lift) : 45;
+    }
+    return (((parsed / 5).round() * 5).clamp(45, 1000)).toInt();
+  }
+
+  void _setLiftValue(String lift, int value, {required bool target}) {
+    _liftController(lift, target: target).text = value
+        .clamp(45, 1000)
+        .toString();
+  }
+
+  TextEditingController _liftController(String lift, {required bool target}) {
+    switch (lift) {
+      case 'bench':
+        return target ? _goalBenchController : _benchController;
+      case 'deadlift':
+        return target ? _goalDeadliftController : _deadliftController;
+      case 'ohp':
+        return target ? _goalOhpController : _ohpController;
+      case 'squat':
+      default:
+        return target ? _goalSquatController : _squatController;
+    }
+  }
+
+  int _defaultGoalValue(String lift) {
+    switch (lift) {
+      case 'bench':
+        return 225;
+      case 'deadlift':
+        return 405;
+      case 'ohp':
+        return 135;
+      case 'squat':
+      default:
+        return 315;
+    }
+  }
 }
 
 class _OnboardingStepMeta {
@@ -1318,9 +1516,7 @@ class _OnboardingStepShell extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          Expanded(
-            child: SingleChildScrollView(child: child),
-          ),
+          Expanded(child: SingleChildScrollView(child: child)),
         ],
       ),
     );
@@ -1560,65 +1756,407 @@ class _LiftField extends StatelessWidget {
   }
 }
 
-class _AppTourCard extends StatelessWidget {
-  final IconData icon;
+class _BarbellLiftInput extends StatelessWidget {
   final String title;
-  final String description;
+  final String helper;
+  final String activeLift;
+  final Map<String, int> values;
+  final ValueChanged<String> onLiftSelected;
+  final ValueChanged<int> onWeightChanged;
 
-  const _AppTourCard({
-    required this.icon,
+  const _BarbellLiftInput({
     required this.title,
-    required this.description,
+    required this.helper,
+    required this.activeLift,
+    required this.values,
+    required this.onLiftSelected,
+    required this.onWeightChanged,
+  });
+
+  static const List<_LiftChoice> _lifts = [
+    _LiftChoice(
+      'squat',
+      'Squat',
+      Icons.accessibility_new,
+      IronMindColors.accent,
+    ),
+    _LiftChoice('bench', 'Bench', Icons.fitness_center, IronMindColors.success),
+    _LiftChoice(
+      'deadlift',
+      'Deadlift',
+      Icons.arrow_upward_rounded,
+      IronMindColors.warning,
+    ),
+    _LiftChoice('ohp', 'OHP', Icons.upload_rounded, Color(0xFFB47FFF)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _lifts.firstWhere(
+      (lift) => lift.value == activeLift,
+      orElse: () => _lifts.first,
+    );
+    final weight = values[activeLift] ?? 45;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: IronMindColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: IronMindColors.border),
+          ),
+          child: Text(
+            helper,
+            style: GoogleFonts.dmSans(
+              color: IronMindColors.textSecondary,
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          title,
+          style: GoogleFonts.dmMono(
+            color: IronMindColors.textMuted,
+            fontSize: 9,
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _lifts.map((lift) {
+            return _LiftPickerChip(
+              lift: lift,
+              value: values[lift.value] ?? 45,
+              selected: lift.value == activeLift,
+              onTap: () => onLiftSelected(lift.value),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 18),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: IronMindColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: active.color.withValues(alpha: 0.35)),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Icon(active.icon, color: active.color, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      active.label,
+                      style: GoogleFonts.bebasNeue(
+                        color: IronMindColors.textPrimary,
+                        fontSize: 24,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '$weight lb',
+                    style: GoogleFonts.dmMono(
+                      color: active.color,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              _LoadedBarbell(weight: weight, color: active.color),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  _PlateButton(label: '-45', onTap: () => _change(weight, -45)),
+                  _PlateButton(label: '-25', onTap: () => _change(weight, -25)),
+                  _PlateButton(label: '-10', onTap: () => _change(weight, -10)),
+                  _PlateButton(label: '-5', onTap: () => _change(weight, -5)),
+                  _PlateButton(label: '+5', onTap: () => _change(weight, 5)),
+                  _PlateButton(label: '+10', onTap: () => _change(weight, 10)),
+                  _PlateButton(label: '+25', onTap: () => _change(weight, 25)),
+                  _PlateButton(label: '+45', onTap: () => _change(weight, 45)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _change(int current, int delta) {
+    final next = (current + delta).clamp(45, 1000);
+    final rounded = (((next / 5).round() * 5).clamp(45, 1000)).toInt();
+    onWeightChanged(rounded);
+  }
+}
+
+class _LiftChoice {
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _LiftChoice(this.value, this.label, this.icon, this.color);
+}
+
+class _LiftPickerChip extends StatelessWidget {
+  final _LiftChoice lift;
+  final int value;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _LiftPickerChip({
+    required this.lift,
+    required this.value,
+    required this.selected,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: IronMindColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: IronMindColors.border),
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        width: 132,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected
+              ? lift.color.withValues(alpha: 0.14)
+              : IronMindColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? lift.color : IronMindColors.border,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              lift.icon,
+              color: selected ? lift.color : IronMindColors.textMuted,
+              size: 18,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              lift.label,
+              style: GoogleFonts.dmSans(
+                color: IronMindColors.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '$value lb',
+              style: GoogleFonts.dmMono(
+                color: selected ? lift.color : IronMindColors.textMuted,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: IronMindColors.accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
+    );
+  }
+}
+
+class _LoadedBarbell extends StatelessWidget {
+  final int weight;
+  final Color color;
+
+  const _LoadedBarbell({required this.weight, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final plates = _platesPerSide(weight);
+    final left = plates.reversed.toList();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SizedBox(
+          height: 112,
+          child: Stack(
             alignment: Alignment.center,
-            child: Icon(icon, color: IronMindColors.accent, size: 18),
+            children: [
+              Container(
+                height: 10,
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: IronMindColors.textMuted,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              Container(
+                width: 72,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: IronMindColors.textSecondary,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: IronMindColors.textPrimary.withValues(alpha: 0.18),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                child: _PlateStack(
+                  plates: left,
+                  color: color,
+                  alignRight: true,
+                ),
+              ),
+              Positioned(
+                right: 0,
+                child: _PlateStack(
+                  plates: plates,
+                  color: color,
+                  alignRight: false,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.bebasNeue(
-                    color: IronMindColors.textPrimary,
-                    fontSize: 16,
-                    letterSpacing: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  description,
-                  style: GoogleFonts.dmSans(
-                    color: IronMindColors.textSecondary,
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
-                ),
-              ],
+        );
+      },
+    );
+  }
+
+  static List<double> _platesPerSide(int totalWeight) {
+    var remaining = ((totalWeight - 45).clamp(0, 1000)) / 2.0;
+    const available = [45.0, 35.0, 25.0, 10.0, 5.0, 2.5];
+    final plates = <double>[];
+    for (final plate in available) {
+      while (remaining + 0.01 >= plate) {
+        plates.add(plate);
+        remaining -= plate;
+      }
+    }
+    return plates.take(7).toList();
+  }
+}
+
+class _PlateStack extends StatelessWidget {
+  final List<double> plates;
+  final Color color;
+  final bool alignRight;
+
+  const _PlateStack({
+    required this.plates,
+    required this.color,
+    required this.alignRight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (plates.isEmpty) {
+      return Container(
+        width: 38,
+        height: 28,
+        alignment: Alignment.center,
+        child: Container(
+          width: 8,
+          height: 28,
+          decoration: BoxDecoration(
+            color: IronMindColors.textMuted,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+      );
+    }
+
+    final children = plates.map((plate) {
+      final height = 38.0 + plate;
+      final width = plate >= 25 ? 14.0 : 10.0;
+      return Container(
+        width: width,
+        height: height.clamp(44.0, 86.0),
+        margin: const EdgeInsets.symmetric(horizontal: 1.5),
+        decoration: BoxDecoration(
+          color: _plateColor(plate),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.35)),
+        ),
+        alignment: Alignment.center,
+        child: RotatedBox(
+          quarterTurns: 3,
+          child: Text(
+            plate == 2.5 ? '2.5' : plate.toInt().toString(),
+            style: GoogleFonts.dmMono(
+              color: Colors.black.withValues(alpha: 0.68),
+              fontSize: 8,
+              fontWeight: FontWeight.w800,
             ),
           ),
-        ],
+        ),
+      );
+    }).toList();
+
+    return SizedBox(
+      width: 118,
+      child: Row(
+        mainAxisAlignment: alignRight
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: children,
+      ),
+    );
+  }
+
+  Color _plateColor(double plate) {
+    if (plate >= 45) return color;
+    if (plate >= 35) return IronMindColors.warning;
+    if (plate >= 25) return IronMindColors.success;
+    if (plate >= 10) return IronMindColors.accent;
+    return IronMindColors.textSecondary;
+  }
+}
+
+class _PlateButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _PlateButton({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 58,
+      child: OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          minimumSize: const Size(0, 40),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.dmMono(
+            color: IronMindColors.textPrimary,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -1667,7 +2205,7 @@ class _ImageSourceTile extends StatelessWidget {
   }
 }
 
-// ── Onboarding helper widgets ─────────────────────────────────────────────────
+// Onboarding helper widgets
 
 class _PreviewRow extends StatelessWidget {
   final IconData icon;
@@ -1688,14 +2226,22 @@ class _PreviewRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label,
+                Text(
+                  label,
                   style: GoogleFonts.dmMono(
                     color: IronMindColors.textMuted,
-                    fontSize: 8, letterSpacing: 1)),
-                Text(value,
+                    fontSize: 8,
+                    letterSpacing: 1,
+                  ),
+                ),
+                Text(
+                  value,
                   style: GoogleFonts.dmSans(
                     color: IronMindColors.textPrimary,
-                    fontSize: 12, fontWeight: FontWeight.w500)),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1714,18 +2260,31 @@ class _TotalCell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label.toUpperCase(),
+        Text(
+          label.toUpperCase(),
           style: GoogleFonts.dmMono(
-            color: IronMindColors.textMuted, fontSize: 8, letterSpacing: 1)),
+            color: IronMindColors.textMuted,
+            fontSize: 8,
+            letterSpacing: 1,
+          ),
+        ),
         const SizedBox(height: 4),
-        Text(value > 0 ? '${value.toInt()}' : '—',
+        Text(
+          value > 0 ? '${value.toInt()}' : '-',
           style: GoogleFonts.bebasNeue(
             color: value > 0
                 ? IronMindColors.textPrimary
                 : IronMindColors.textMuted,
-            fontSize: 18)),
-        Text('lb', style: GoogleFonts.dmMono(
-          color: IronMindColors.textMuted, fontSize: 8)),
+            fontSize: 18,
+          ),
+        ),
+        Text(
+          'lb',
+          style: GoogleFonts.dmMono(
+            color: IronMindColors.textMuted,
+            fontSize: 8,
+          ),
+        ),
       ],
     );
   }
@@ -1745,7 +2304,8 @@ class _FeatureRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 28, height: 28,
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
               color: IronMindColors.accent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
@@ -1757,14 +2317,22 @@ class _FeatureRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
+                Text(
+                  title,
                   style: GoogleFonts.dmSans(
                     color: IronMindColors.textPrimary,
-                    fontSize: 12, fontWeight: FontWeight.w600)),
-                Text(description,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  description,
                   style: GoogleFonts.dmSans(
                     color: IronMindColors.textSecondary,
-                    fontSize: 11, height: 1.3)),
+                    fontSize: 11,
+                    height: 1.3,
+                  ),
+                ),
               ],
             ),
           ),
