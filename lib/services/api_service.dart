@@ -19,7 +19,8 @@ class ApiService {
   static const String _nutritionPlansKey = 'nutrition_plans';
   static const String _habitsKey = 'habits';
   static const String _habitLogsKey = 'habit_logs';
-  static const String _exerciseDbBase = 'https://exercisedb-api.vercel.app/api/v1';
+  static const String _exerciseDbBase = 'https://oss.exercisedb.dev/api/v1';
+  static List<Map<String, dynamic>>? _ossExerciseCache;
 
   static Future<String> _scopedKey(String key) async {
     final userId = await AuthService.getCurrentUserId();
@@ -29,76 +30,85 @@ class ApiService {
 
   static String _foodEntriesKey(String date) => 'food_entries_$date';
 
-  static Future<List<Map<String, dynamic>>> searchExercises(String query) async {
-    try {
-      final encoded = Uri.encodeComponent(query.toLowerCase());
-      final url = '$_exerciseDbBase/exercises?name=$encoded&limit=30&offset=0';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 6));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final exercises = data['data'] as List<dynamic>? ?? [];
-        return exercises
-            .map((e) => {
-                  'name': e['name'] ?? '',
-                  'bodyPart': e['bodyPart'] ?? '',
-                  'target': e['target'] ?? '',
-                  'equipment': e['equipment'] ?? '',
-                })
-            .toList();
-      }
-    } catch (_) {}
+  static Future<List<Map<String, dynamic>>> searchExercises(
+    String query,
+  ) async {
+    final live = await _fetchOssExercises(query: query);
+    if (live.isNotEmpty) {
+      return _mergeAndSortExercises(live, _fallbackResults(query: query));
+    }
 
     final normalized = query.toLowerCase();
     return _fallbackExercises
-        .where((e) =>
-            e['name']!.toLowerCase().contains(normalized) ||
-            e['bodyPart']!.toLowerCase().contains(normalized) ||
-            e['equipment']!.toLowerCase().contains(normalized))
+        .where((e) => _exerciseMatches(e, normalized))
         .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+        .toList()
+      ..sort(_compareExerciseNames);
   }
 
-  static Future<List<Map<String, dynamic>>> getExercisesByBodyPart(String bodyPart) async {
-    try {
-      final encoded = Uri.encodeComponent(bodyPart.toLowerCase());
-      final url = '$_exerciseDbBase/exercises/bodyPart/$encoded?limit=40&offset=0';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 6));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final exercises = data['data'] as List<dynamic>? ?? [];
-        return exercises
-            .map((e) => {
-                  'name': e['name'] ?? '',
-                  'bodyPart': e['bodyPart'] ?? '',
-                  'target': e['target'] ?? '',
-                  'equipment': e['equipment'] ?? '',
-                })
-            .toList();
-      }
-    } catch (_) {}
+  static Future<List<Map<String, dynamic>>> getExercisesByBodyPart(
+    String bodyPart,
+  ) async {
+    final live = await _fetchOssExercises(bodyPart: bodyPart);
+    if (live.isNotEmpty) {
+      return _mergeAndSortExercises(live, _fallbackResults(bodyPart: bodyPart));
+    }
 
     return _fallbackExercises
-        .where((e) => e['bodyPart']!.toLowerCase() == bodyPart.toLowerCase())
+        .where((e) => _exerciseMatchesMuscleGroup(e, bodyPart))
         .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+        .toList()
+      ..sort(_compareExerciseNames);
   }
 
   static Future<List<String>> getBodyParts() async {
-    final bodyParts = _fallbackExercises
-        .map((exercise) => exercise['bodyPart']!)
-        .toSet()
-        .toList()
-      ..sort();
-    return bodyParts;
+    return _primaryMuscleGroups;
+  }
+
+  static Future<Map<String, String>> getMuscleGroupMedia() async {
+    final live = await _fetchOssExercises();
+    final media = <String, String>{};
+    for (final preferred in _muscleGroupRepresentativeNames.entries) {
+      final match = live.firstWhere(
+        (exercise) =>
+            _exerciseMatchesMuscleGroup(exercise, preferred.key) &&
+            exercise['name'].toString().toLowerCase().contains(
+              preferred.value,
+            ) &&
+            exercise['gifUrl'].toString().trim().isNotEmpty,
+        orElse: () => const <String, dynamic>{},
+      );
+      final gifUrl = match['gifUrl']?.toString().trim() ?? '';
+      if (gifUrl.isNotEmpty) media[preferred.key] = gifUrl;
+    }
+    for (final exercise in live) {
+      final gifUrl = exercise['gifUrl']?.toString().trim() ?? '';
+      if (gifUrl.isEmpty) continue;
+      for (final group in _muscleGroupsForExercise(exercise)) {
+        media.putIfAbsent(group, () => gifUrl);
+      }
+    }
+    return media;
   }
 
   static Future<List<String>> getEquipmentList() async {
-    final equipment = _fallbackExercises
-        .map((exercise) => exercise['equipment']!)
-        .toSet()
-        .toList()
-      ..sort();
-    return equipment;
+    final live = await _fetchOssExercises();
+    final source = live.isNotEmpty ? live : _fallbackExercises;
+    final equipment = <String>{};
+    for (final exercise in source) {
+      final parentEquipment = exercise['equipment'].toString();
+      if (parentEquipment.isNotEmpty) equipment.add(parentEquipment);
+      final variants = exercise['variants'];
+      if (variants is List) {
+        for (final variant in variants) {
+          if (variant is Map && variant['equipment'] != null) {
+            equipment.add(variant['equipment'].toString());
+          }
+        }
+      }
+    }
+    final sortedEquipment = equipment.toList()..sort();
+    return sortedEquipment;
   }
 
   static Future<List<Map<String, dynamic>>> getExercises({
@@ -106,20 +116,162 @@ class ApiService {
     String? bodyPart,
     String? equipment,
   }) async {
-    Iterable<Map<String, String>> results = _fallbackExercises;
+    final live = await _fetchOssExercises(
+      query: query,
+      bodyPart: bodyPart,
+      equipment: equipment,
+    );
+    if (live.isNotEmpty) {
+      return _mergeAndSortExercises(
+        live,
+        _fallbackResults(
+          query: query,
+          bodyPart: bodyPart,
+          equipment: equipment,
+        ),
+      );
+    }
+
+    final results = _fallbackResults(
+      query: query,
+      bodyPart: bodyPart,
+      equipment: equipment,
+    );
+
+    return _sortExercisesByName(results);
+  }
+
+  static List<Map<String, dynamic>> _fallbackResults({
+    String query = '',
+    String? bodyPart,
+    String? equipment,
+  }) {
+    Iterable<Map<String, dynamic>> results = _fallbackExercises;
 
     if (query.trim().isNotEmpty) {
       final normalized = query.trim().toLowerCase();
-      results = results.where((exercise) => exercise['name']!.toLowerCase().contains(normalized));
+      results = results.where(
+        (exercise) => _exerciseMatches(exercise, normalized),
+      );
     }
     if (bodyPart != null && bodyPart.isNotEmpty) {
-      results = results.where((exercise) => exercise['bodyPart']!.toLowerCase() == bodyPart.toLowerCase());
+      results = results.where(
+        (exercise) => _exerciseMatchesMuscleGroup(exercise, bodyPart),
+      );
     }
     if (equipment != null && equipment.isNotEmpty) {
-      results = results.where((exercise) => exercise['equipment']!.toLowerCase() == equipment.toLowerCase());
+      results = results.where(
+        (exercise) => _exerciseHasEquipment(exercise, equipment.toLowerCase()),
+      );
     }
 
-    return results.map((exercise) => Map<String, dynamic>.from(exercise)).toList();
+    return results
+        .map((exercise) => Map<String, dynamic>.from(exercise))
+        .toList();
+  }
+
+  static Future<List<Map<String, dynamic>>> _fetchOssExercises({
+    String query = '',
+    String? bodyPart,
+    String? equipment,
+    int limit = 1600,
+  }) async {
+    try {
+      final normalized = _ossExerciseCache ??= await _downloadOssExercises(
+        limit: limit,
+      );
+      if (normalized.isEmpty) return [];
+
+      final normalizedQuery = query.trim().toLowerCase();
+      final normalizedBodyPart = bodyPart?.trim().toLowerCase() ?? '';
+      final normalizedEquipment = equipment?.trim().toLowerCase() ?? '';
+
+      final results = normalized.where((exercise) {
+        if (normalizedQuery.isNotEmpty &&
+            !_exerciseMatches(exercise, normalizedQuery)) {
+          return false;
+        }
+        if (normalizedBodyPart.isNotEmpty &&
+            !_exerciseMatchesMuscleGroup(exercise, normalizedBodyPart)) {
+          return false;
+        }
+        if (normalizedEquipment.isNotEmpty &&
+            !_exerciseHasEquipment(exercise, normalizedEquipment)) {
+          return false;
+        }
+        return true;
+      }).toList();
+      return _sortExercisesByName(results);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> _downloadOssExercises({
+    required int limit,
+  }) async {
+    final uri = Uri.parse(
+      '$_exerciseDbBase/exercises',
+    ).replace(queryParameters: {'limit': '$limit', 'offset': '0'});
+    final response = await http.get(uri).timeout(const Duration(seconds: 8));
+    if (response.statusCode != 200) return [];
+
+    final decoded = jsonDecode(response.body);
+    final rawExercises = decoded is List
+        ? decoded
+        : (decoded is Map ? decoded['data'] as List? ?? const [] : const []);
+    return rawExercises
+        .whereType<Map>()
+        .map(_normalizeOssExercise)
+        .where((exercise) => exercise['name'].toString().isNotEmpty)
+        .map(_attachLocalExerciseVariants)
+        .toList()
+      ..sort(_compareExerciseNames);
+  }
+
+  static Map<String, dynamic> _normalizeOssExercise(Map<dynamic, dynamic> raw) {
+    final bodyParts = _stringList(raw['bodyParts']);
+    final targetMuscles = _stringList(raw['targetMuscles']);
+    final equipments = _stringList(raw['equipments']);
+    return {
+      'id': raw['exerciseId']?.toString() ?? '',
+      'name': raw['name']?.toString() ?? '',
+      'bodyPart': bodyParts.isNotEmpty ? bodyParts.first : '',
+      'target': targetMuscles.isNotEmpty ? targetMuscles.first : '',
+      'equipment': equipments.isNotEmpty ? equipments.first : '',
+      'bodyParts': bodyParts,
+      'targetMuscles': targetMuscles,
+      'equipments': equipments,
+      'gifUrl': raw['gifUrl']?.toString(),
+      'instructions': _stringList(raw['instructions']),
+      'secondaryMuscles': _stringList(raw['secondaryMuscles']),
+    };
+  }
+
+  static Map<String, dynamic> _attachLocalExerciseVariants(
+    Map<String, dynamic> exercise,
+  ) {
+    final exerciseName = exercise['name'].toString().toLowerCase();
+    final match = _fallbackExercises.firstWhere((fallback) {
+      final fallbackName = fallback['name'].toString().toLowerCase();
+      return exerciseName == fallbackName ||
+          exerciseName.contains(fallbackName);
+    }, orElse: () => const <String, dynamic>{});
+    final variants = match['variants'];
+    if (variants is! List || variants.isEmpty) return exercise;
+    return {...exercise, 'variants': variants};
+  }
+
+  static List<String> _stringList(dynamic value) {
+    if (value is List) {
+      return value
+          .map((item) => item.toString())
+          .where((item) => item.trim().isNotEmpty)
+          .toList();
+    }
+    if (value == null) return const [];
+    final text = value.toString();
+    return text.trim().isEmpty ? const [] : [text];
   }
 
   static Future<List<Map<String, dynamic>>> getLogs() async {
@@ -157,7 +309,10 @@ class ApiService {
       }
       return item;
     }).toList();
-    list.sort((a, b) => (b['date']?.toString() ?? '').compareTo(a['date']?.toString() ?? ''));
+    list.sort(
+      (a, b) =>
+          (b['date']?.toString() ?? '').compareTo(a['date']?.toString() ?? ''),
+    );
     return list;
   }
 
@@ -168,8 +323,12 @@ class ApiService {
       throw Exception('Exercise is required.');
     }
 
-    final weight = (pr['weight'] as num?)?.toDouble() ?? double.tryParse('${pr['weight']}') ?? 0;
-    final reps = (pr['reps'] as num?)?.toInt() ?? int.tryParse('${pr['reps']}') ?? 0;
+    final weight =
+        (pr['weight'] as num?)?.toDouble() ??
+        double.tryParse('${pr['weight']}') ??
+        0;
+    final reps =
+        (pr['reps'] as num?)?.toInt() ?? int.tryParse('${pr['reps']}') ?? 0;
     final key = exercise.toLowerCase();
 
     final saved = <String, dynamic>{
@@ -178,7 +337,8 @@ class ApiService {
       'weight': weight,
       'reps': reps,
       'estimated_1rm': calculate1RM(weight, reps).round(),
-      'date': (pr['date'] ?? DateTime.now().toIso8601String().split('T')[0]).toString(),
+      'date': (pr['date'] ?? DateTime.now().toIso8601String().split('T')[0])
+          .toString(),
     };
 
     prs[key] = saved;
@@ -187,7 +347,9 @@ class ApiService {
     return saved;
   }
 
-  static Future<Map<String, dynamic>?> getLastPRForExercise(String exercise) async {
+  static Future<Map<String, dynamic>?> getLastPRForExercise(
+    String exercise,
+  ) async {
     final prs = await getPRs();
     return prs[exercise.toLowerCase()] is Map
         ? Map<String, dynamic>.from(prs[exercise.toLowerCase()] as Map)
@@ -216,13 +378,18 @@ class ApiService {
     return calculate1RM(weight, reps);
   }
 
-  static Future<bool> checkAndSavePR(String exercise, double weight, int reps) async {
+  static Future<bool> checkAndSavePR(
+    String exercise,
+    double weight,
+    int reps,
+  ) async {
     final prs = await getPRs();
     final key = exercise.toLowerCase();
     final estimated1rm = calculate1RM(weight, reps);
     final current = prs[key];
 
-    if (current == null || estimated1rm > _prScore(Map<String, dynamic>.from(current as Map))) {
+    if (current == null ||
+        estimated1rm > _prScore(Map<String, dynamic>.from(current as Map))) {
       prs[key] = {
         'exercise': exercise,
         'weight': weight,
@@ -238,7 +405,10 @@ class ApiService {
     return false;
   }
 
-  static Future<void> _syncProfileLiftFromPr(String exercise, double weight) async {
+  static Future<void> _syncProfileLiftFromPr(
+    String exercise,
+    double weight,
+  ) async {
     if (weight <= 0) return;
 
     final mapping = _profileLiftFieldForExercise(exercise);
@@ -252,7 +422,9 @@ class ApiService {
 
     if (weight <= currentValue) return;
 
-    final formatted = weight % 1 == 0 ? weight.toInt().toString() : weight.toString();
+    final formatted = weight % 1 == 0
+        ? weight.toInt().toString()
+        : weight.toString();
     profile[mapping.primaryKey] = formatted;
     profile[mapping.currentKey] = weight;
     await saveProfile(profile);
@@ -303,13 +475,19 @@ class ApiService {
     routine['id'] = DateTime.now().millisecondsSinceEpoch.toString();
     routine['createdAt'] = DateTime.now().toIso8601String();
     routines.add(routine);
-    await localStore.setString(await _scopedKey(_routinesKey), jsonEncode(routines));
+    await localStore.setString(
+      await _scopedKey(_routinesKey),
+      jsonEncode(routines),
+    );
   }
 
   static Future<void> deleteRoutine(String id) async {
     final routines = await getRoutines();
     routines.removeWhere((routine) => routine['id'] == id);
-    await localStore.setString(await _scopedKey(_routinesKey), jsonEncode(routines));
+    await localStore.setString(
+      await _scopedKey(_routinesKey),
+      jsonEncode(routines),
+    );
   }
 
   static Future<Map<String, dynamic>> getProfile() async {
@@ -319,7 +497,10 @@ class ApiService {
   }
 
   static Future<void> saveProfile(Map<String, dynamic> profile) async {
-    await localStore.setString(await _scopedKey(_profileKey), jsonEncode(profile));
+    await localStore.setString(
+      await _scopedKey(_profileKey),
+      jsonEncode(profile),
+    );
   }
 
   static Future<Map<String, dynamic>> getLifterProfile() async => getProfile();
@@ -331,12 +512,7 @@ class ApiService {
   static Future<Map<String, dynamic>> getStrengthGoals() async {
     final raw = await localStore.getString(await _scopedKey(_goalsKey));
     if (raw == null) {
-      return {
-        'squat': 315,
-        'bench': 225,
-        'deadlift': 405,
-        'ohp': 135,
-      };
+      return {'squat': 315, 'bench': 225, 'deadlift': 405, 'ohp': 135};
     }
     return Map<String, dynamic>.from(jsonDecode(raw));
   }
@@ -353,11 +529,11 @@ class ApiService {
 
   static Future<void> logBodyweight(double weight) async {
     final logs = await getBodyweightLogs();
-    logs.add({
-      'weight': weight,
-      'date': DateTime.now().toIso8601String(),
-    });
-    await localStore.setString(await _scopedKey(_bodyweightKey), jsonEncode(logs));
+    logs.add({'weight': weight, 'date': DateTime.now().toIso8601String()});
+    await localStore.setString(
+      await _scopedKey(_bodyweightKey),
+      jsonEncode(logs),
+    );
   }
 
   static Future<List<Map<String, dynamic>>> getMeasurements() async {
@@ -370,7 +546,10 @@ class ApiService {
     final logs = await getMeasurements();
     measurement['date'] = DateTime.now().toIso8601String();
     logs.insert(0, measurement);
-    await localStore.setString(await _scopedKey(_measurementsKey), jsonEncode(logs));
+    await localStore.setString(
+      await _scopedKey(_measurementsKey),
+      jsonEncode(logs),
+    );
   }
 
   static Future<List<Map<String, dynamic>>> getWellnessLogs() async {
@@ -383,10 +562,14 @@ class ApiService {
     final logs = await getWellnessLogs();
     entry['date'] = DateTime.now().toIso8601String();
     logs.insert(0, entry);
-    await localStore.setString(await _scopedKey(_wellnessKey), jsonEncode(logs));
+    await localStore.setString(
+      await _scopedKey(_wellnessKey),
+      jsonEncode(logs),
+    );
   }
 
-  static Future<bool> isOnboardingComplete() async => !(await AuthService.needsOnboarding());
+  static Future<bool> isOnboardingComplete() async =>
+      !(await AuthService.needsOnboarding());
 
   static Future<void> completeOnboarding() async {
     await AuthService.completeOnboarding();
@@ -397,29 +580,34 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getNutritionTargets() async {
-    final raw = await localStore.getString(await _scopedKey(_nutritionTargetsKey));
+    final raw = await localStore.getString(
+      await _scopedKey(_nutritionTargetsKey),
+    );
     if (raw == null) {
-      return {
-        'calories': 2300,
-        'protein': 260,
-        'carbs': 200,
-        'fat': 55,
-      };
+      return {'calories': 2300, 'protein': 260, 'carbs': 200, 'fat': 55};
     }
     return Map<String, dynamic>.from(jsonDecode(raw));
   }
 
   static Future<void> saveNutritionTargets(Map<String, dynamic> targets) async {
-    await localStore.setString(await _scopedKey(_nutritionTargetsKey), jsonEncode(targets));
+    await localStore.setString(
+      await _scopedKey(_nutritionTargetsKey),
+      jsonEncode(targets),
+    );
   }
 
   static Future<List<Map<String, dynamic>>> getFoodEntries(String date) async {
-    final raw = await localStore.getString(await _scopedKey(_foodEntriesKey(date)));
+    final raw = await localStore.getString(
+      await _scopedKey(_foodEntriesKey(date)),
+    );
     if (raw == null) return [];
     return List<Map<String, dynamic>>.from(jsonDecode(raw));
   }
 
-  static Future<void> saveFoodEntry(String date, Map<String, dynamic> food) async {
+  static Future<void> saveFoodEntry(
+    String date,
+    Map<String, dynamic> food,
+  ) async {
     final entries = await getFoodEntries(date);
     entries.add({
       'name': food['name'] ?? '',
@@ -432,7 +620,10 @@ class ApiService {
       'meal': food['meal'] ?? 'Other',
       'date': DateTime.now().toIso8601String(),
     });
-    await localStore.setString(await _scopedKey(_foodEntriesKey(date)), jsonEncode(entries));
+    await localStore.setString(
+      await _scopedKey(_foodEntriesKey(date)),
+      jsonEncode(entries),
+    );
   }
 
   // ── Water tracking ───────────────────────────────────────────────────────────
@@ -444,14 +635,20 @@ class ApiService {
 
   static Future<void> setWaterGlasses(String date, int glasses) async {
     final clamped = glasses.clamp(0, 20);
-    await localStore.setString(await _scopedKey('water_$date'), clamped.toString());
+    await localStore.setString(
+      await _scopedKey('water_$date'),
+      clamped.toString(),
+    );
   }
 
   static Future<void> deleteFoodEntry(String date, int index) async {
     final entries = await getFoodEntries(date);
     if (index < 0 || index >= entries.length) return;
     entries.removeAt(index);
-    await localStore.setString(await _scopedKey(_foodEntriesKey(date)), jsonEncode(entries));
+    await localStore.setString(
+      await _scopedKey(_foodEntriesKey(date)),
+      jsonEncode(entries),
+    );
   }
 
   static Future<List<Map<String, dynamic>>> searchFood(String query) async {
@@ -477,7 +674,10 @@ class ApiService {
       'dailyMeals': _buildMealPlanDays(days, mealsPerDay, targets, preferences),
     };
     plans.insert(0, plan);
-    await localStore.setString(await _scopedKey(_nutritionPlansKey), jsonEncode(plans));
+    await localStore.setString(
+      await _scopedKey(_nutritionPlansKey),
+      jsonEncode(plans),
+    );
   }
 
   static Future<Map<String, dynamic>?> getLatestNutrition() async {
@@ -497,7 +697,9 @@ class ApiService {
     final focus = (profile['goal'] ?? 'strength').toString();
     final experience = (profile['experience'] ?? 'intermediate').toString();
     final equipment = List<String>.from(profile['equipment'] ?? const []);
-    final equipmentText = equipment.isEmpty ? 'Standard gym equipment' : equipment.join(', ');
+    final equipmentText = equipment.isEmpty
+        ? 'Standard gym equipment'
+        : equipment.join(', ');
 
     return [
       'IRONMIND AI DEMO',
@@ -519,7 +721,9 @@ class ApiService {
   }
 
   static Future<List<Map<String, dynamic>>> _getNutritionPlans() async {
-    final raw = await localStore.getString(await _scopedKey(_nutritionPlansKey));
+    final raw = await localStore.getString(
+      await _scopedKey(_nutritionPlansKey),
+    );
     if (raw == null) return [];
     return List<Map<String, dynamic>>.from(jsonDecode(raw));
   }
@@ -538,7 +742,8 @@ class ApiService {
 
     return List<Map<String, dynamic>>.generate(days, (index) {
       final selectedMeals = List<String>.generate(mealsPerDay, (mealIndex) {
-        final template = _mealTemplates[(index + mealIndex) % _mealTemplates.length];
+        final template =
+            _mealTemplates[(index + mealIndex) % _mealTemplates.length];
         return '${template['label']}: ${template['meal']}';
       });
 
@@ -575,17 +780,26 @@ class ApiService {
     habit['id'] = DateTime.now().millisecondsSinceEpoch.toString();
     habit['createdAt'] = DateTime.now().toIso8601String();
     habits.add(habit);
-    await localStore.setString(await _scopedKey(_habitsKey), jsonEncode(habits));
+    await localStore.setString(
+      await _scopedKey(_habitsKey),
+      jsonEncode(habits),
+    );
   }
 
   static Future<void> deleteHabit(String id) async {
     final habits = await getHabits();
     habits.removeWhere((h) => h['id'] == id);
-    await localStore.setString(await _scopedKey(_habitsKey), jsonEncode(habits));
+    await localStore.setString(
+      await _scopedKey(_habitsKey),
+      jsonEncode(habits),
+    );
     // remove logs too
     final logs = await _getRawHabitLogs();
     logs.removeWhere((l) => l['habitId'] == id);
-    await localStore.setString(await _scopedKey(_habitLogsKey), jsonEncode(logs));
+    await localStore.setString(
+      await _scopedKey(_habitLogsKey),
+      jsonEncode(logs),
+    );
   }
 
   static Future<List<Map<String, dynamic>>> _getRawHabitLogs() async {
@@ -605,14 +819,19 @@ class ApiService {
 
   static Future<void> toggleHabitLog(String habitId, String date) async {
     final logs = await _getRawHabitLogs();
-    final idx = logs.indexWhere((l) => l['habitId'] == habitId && l['date'] == date);
+    final idx = logs.indexWhere(
+      (l) => l['habitId'] == habitId && l['date'] == date,
+    );
     if (idx >= 0) {
       // toggle
       logs[idx]['completed'] = !(logs[idx]['completed'] as bool? ?? false);
     } else {
       logs.add({'habitId': habitId, 'date': date, 'completed': true});
     }
-    await localStore.setString(await _scopedKey(_habitLogsKey), jsonEncode(logs));
+    await localStore.setString(
+      await _scopedKey(_habitLogsKey),
+      jsonEncode(logs),
+    );
   }
 
   /// Computes {currentStreak, longestStreak} for a given set of completed dates.
@@ -633,8 +852,8 @@ class ApiService {
     DateTime cursor = completedDates.contains(todayStr)
         ? today
         : (completedDates.contains(yesterdayStr)
-            ? today.subtract(const Duration(days: 1))
-            : DateTime(1970)); // no active streak
+              ? today.subtract(const Duration(days: 1))
+              : DateTime(1970)); // no active streak
 
     if (cursor.year > 1970) {
       while (completedDates.contains(_dateStr(cursor))) {
@@ -665,7 +884,10 @@ class ApiService {
   }
 
   /// Returns a list of booleans for the last [days] calendar days (oldest first).
-  static List<bool> buildHabitGrid(Set<String> completedDates, {int days = 91}) {
+  static List<bool> buildHabitGrid(
+    Set<String> completedDates, {
+    int days = 91,
+  }) {
     final today = DateTime.now();
     return List<bool>.generate(days, (i) {
       final d = today.subtract(Duration(days: days - 1 - i));
@@ -698,7 +920,9 @@ class ApiService {
   }
 
   /// Returns dates on which the user logged at least one food entry.
-  static Future<Set<String>> getNutritionLoggedDates({int lookbackDays = 91}) async {
+  static Future<Set<String>> getNutritionLoggedDates({
+    int lookbackDays = 91,
+  }) async {
     final today = DateTime.now();
     final Set<String> dates = {};
     for (int i = 0; i < lookbackDays; i++) {
@@ -727,7 +951,11 @@ class ApiService {
         .toSet();
   }
 
-  static double calculate1RM(double weight, int reps, [String formula = 'Epley']) {
+  static double calculate1RM(
+    double weight,
+    int reps, [
+    String formula = 'Epley',
+  ]) {
     if (weight <= 0 || reps <= 0) return 0;
     if (reps == 1) return weight;
 
@@ -749,41 +977,783 @@ class ApiService {
       default:
         result = weight * (1 + reps / 30.0);
     }
-    if (result.isNaN || result.isInfinite || result < 0) return weight * (1 + reps / 30.0);
+    if (result.isNaN || result.isInfinite || result < 0) {
+      return weight * (1 + reps / 30.0);
+    }
     return result;
   }
 
-  static const List<Map<String, String>> _fallbackExercises = [
-    {'name': 'Back Squat', 'bodyPart': 'upper legs', 'target': 'quads', 'equipment': 'barbell'},
-    {'name': 'Front Squat', 'bodyPart': 'upper legs', 'target': 'quads', 'equipment': 'barbell'},
-    {'name': 'Leg Press', 'bodyPart': 'upper legs', 'target': 'quads', 'equipment': 'machine'},
-    {'name': 'Romanian Deadlift', 'bodyPart': 'upper legs', 'target': 'hamstrings', 'equipment': 'barbell'},
-    {'name': 'Leg Curl', 'bodyPart': 'upper legs', 'target': 'hamstrings', 'equipment': 'machine'},
-    {'name': 'Bench Press', 'bodyPart': 'chest', 'target': 'pectorals', 'equipment': 'barbell'},
-    {'name': 'Incline Bench Press', 'bodyPart': 'chest', 'target': 'pectorals', 'equipment': 'barbell'},
-    {'name': 'Dumbbell Fly', 'bodyPart': 'chest', 'target': 'pectorals', 'equipment': 'dumbbell'},
-    {'name': 'Cable Crossover', 'bodyPart': 'chest', 'target': 'pectorals', 'equipment': 'cable'},
-    {'name': 'Push Up', 'bodyPart': 'chest', 'target': 'pectorals', 'equipment': 'body weight'},
-    {'name': 'Deadlift', 'bodyPart': 'back', 'target': 'spine', 'equipment': 'barbell'},
-    {'name': 'Pull Up', 'bodyPart': 'back', 'target': 'lats', 'equipment': 'body weight'},
-    {'name': 'Barbell Row', 'bodyPart': 'back', 'target': 'lats', 'equipment': 'barbell'},
-    {'name': 'Lat Pulldown', 'bodyPart': 'back', 'target': 'lats', 'equipment': 'cable'},
-    {'name': 'Seated Cable Row', 'bodyPart': 'back', 'target': 'lats', 'equipment': 'cable'},
-    {'name': 'Overhead Press', 'bodyPart': 'shoulders', 'target': 'delts', 'equipment': 'barbell'},
-    {'name': 'Lateral Raise', 'bodyPart': 'shoulders', 'target': 'delts', 'equipment': 'dumbbell'},
-    {'name': 'Face Pull', 'bodyPart': 'shoulders', 'target': 'delts', 'equipment': 'cable'},
-    {'name': 'Barbell Curl', 'bodyPart': 'upper arms', 'target': 'biceps', 'equipment': 'barbell'},
-    {'name': 'Dumbbell Curl', 'bodyPart': 'upper arms', 'target': 'biceps', 'equipment': 'dumbbell'},
-    {'name': 'Hammer Curl', 'bodyPart': 'upper arms', 'target': 'biceps', 'equipment': 'dumbbell'},
-    {'name': 'Tricep Pushdown', 'bodyPart': 'upper arms', 'target': 'triceps', 'equipment': 'cable'},
-    {'name': 'Skull Crusher', 'bodyPart': 'upper arms', 'target': 'triceps', 'equipment': 'barbell'},
-    {'name': 'Close Grip Bench', 'bodyPart': 'upper arms', 'target': 'triceps', 'equipment': 'barbell'},
-    {'name': 'Plank', 'bodyPart': 'waist', 'target': 'abs', 'equipment': 'body weight'},
-    {'name': 'Crunch', 'bodyPart': 'waist', 'target': 'abs', 'equipment': 'body weight'},
-    {'name': 'Leg Raise', 'bodyPart': 'waist', 'target': 'abs', 'equipment': 'body weight'},
-    {'name': 'Calf Raise', 'bodyPart': 'lower legs', 'target': 'calves', 'equipment': 'barbell'},
-    {'name': 'Hip Thrust', 'bodyPart': 'upper legs', 'target': 'glutes', 'equipment': 'barbell'},
-    {'name': 'Lunge', 'bodyPart': 'upper legs', 'target': 'quads', 'equipment': 'body weight'},
+  static bool _exerciseMatches(
+    Map<String, dynamic> exercise,
+    String normalized,
+  ) {
+    final searchable = [
+      exercise['name'],
+      exercise['bodyPart'],
+      exercise['target'],
+      exercise['equipment'],
+      ..._stringList(exercise['bodyParts']),
+      ..._stringList(exercise['targetMuscles']),
+      ..._stringList(exercise['secondaryMuscles']),
+      ..._stringList(exercise['equipments']),
+      ..._muscleGroupsForExercise(exercise),
+    ].join(' ').toLowerCase();
+
+    if (searchable.contains(normalized)) return true;
+
+    if (exercise['name'].toString().toLowerCase().contains(normalized) ||
+        exercise['bodyPart'].toString().toLowerCase().contains(normalized) ||
+        exercise['target'].toString().toLowerCase().contains(normalized) ||
+        exercise['equipment'].toString().toLowerCase().contains(normalized)) {
+      return true;
+    }
+
+    final variants = exercise['variants'];
+    if (variants is! List) return false;
+    return variants.any((variant) {
+      if (variant is! Map) return false;
+      return variant.values.any(
+        (value) => value.toString().toLowerCase().contains(normalized),
+      );
+    });
+  }
+
+  static bool _exerciseHasEquipment(
+    Map<String, dynamic> exercise,
+    String normalizedEquipment,
+  ) {
+    if (exercise['equipment'].toString().toLowerCase() == normalizedEquipment) {
+      return true;
+    }
+    if (_stringList(
+      exercise['equipments'],
+    ).map((e) => e.toLowerCase()).contains(normalizedEquipment)) {
+      return true;
+    }
+    final variants = exercise['variants'];
+    if (variants is! List) return false;
+    return variants.any((variant) {
+      if (variant is! Map) return false;
+      return variant['equipment'].toString().toLowerCase() ==
+          normalizedEquipment;
+    });
+  }
+
+  static List<Map<String, dynamic>> _sortExercisesByName(
+    List<Map<String, dynamic>> exercises,
+  ) {
+    return exercises
+        .map((exercise) => Map<String, dynamic>.from(exercise))
+        .toList()
+      ..sort(_compareExerciseNames);
+  }
+
+  static List<Map<String, dynamic>> _mergeAndSortExercises(
+    List<Map<String, dynamic>> primary,
+    List<Map<String, dynamic>> secondary,
+  ) {
+    final byName = <String, Map<String, dynamic>>{};
+    for (final exercise in [...primary, ...secondary]) {
+      final key = exercise['name'].toString().trim().toLowerCase();
+      if (key.isEmpty) continue;
+      byName.putIfAbsent(key, () => Map<String, dynamic>.from(exercise));
+    }
+    return byName.values.toList()..sort(_compareExerciseNames);
+  }
+
+  static int _compareExerciseNames(
+    Map<String, dynamic> a,
+    Map<String, dynamic> b,
+  ) {
+    return a['name'].toString().toLowerCase().compareTo(
+      b['name'].toString().toLowerCase(),
+    );
+  }
+
+  static bool _exerciseMatchesMuscleGroup(
+    Map<String, dynamic> exercise,
+    String muscleGroup,
+  ) {
+    final normalized = muscleGroup.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+    return _muscleGroupsForExercise(
+      exercise,
+    ).map((group) => group.toLowerCase()).contains(normalized);
+  }
+
+  static Set<String> _muscleGroupsForExercise(Map<String, dynamic> exercise) {
+    final text = [
+      exercise['name'],
+      exercise['bodyPart'],
+      exercise['target'],
+      ..._stringList(exercise['bodyParts']),
+      ..._stringList(exercise['targetMuscles']),
+      ..._stringList(exercise['secondaryMuscles']),
+    ].join(' ').toLowerCase();
+
+    final groups = <String>{};
+
+    if (_containsAny(text, ['bench', 'chest press', 'push-up', 'push up'])) {
+      groups.add('chest');
+      groups.add('triceps');
+    }
+    if (_containsAny(text, ['dip']) && !_containsAny(text, ['hip'])) {
+      groups.add('chest');
+      groups.add('triceps');
+    }
+    if (_containsAny(text, ['deadlift', 'rdl', 'romanian deadlift'])) {
+      groups.add('legs');
+      groups.add('back');
+      groups.add('glutes');
+    }
+    if (_containsAny(text, ['squat', 'lunge', 'leg press', 'leg extension'])) {
+      groups.add('legs');
+      groups.add('glutes');
+    }
+    if (_containsAny(text, ['leg curl', 'hamstring'])) {
+      groups.add('legs');
+    }
+    if (_containsAny(text, ['hip thrust', 'glute bridge', 'kickback'])) {
+      groups.add('glutes');
+      groups.add('legs');
+    }
+    if (_containsAny(text, [
+      'row',
+      'pulldown',
+      'pull down',
+      'pull-up',
+      'pull up',
+      'chin-up',
+      'chin up',
+    ])) {
+      groups.add('back');
+      groups.add('biceps');
+    }
+    if (_containsAny(text, ['curl']) && !_containsAny(text, ['leg curl'])) {
+      groups.add('biceps');
+    }
+    if (_containsAny(text, [
+      'tricep',
+      'skull crusher',
+      'pushdown',
+      'overhead extension',
+    ])) {
+      groups.add('triceps');
+    }
+    if (_containsAny(text, [
+      'overhead press',
+      'shoulder press',
+      'military press',
+      'lateral raise',
+      'rear delt',
+      'face pull',
+    ])) {
+      groups.add('shoulders');
+    }
+    if (_containsAny(text, [
+      'plank',
+      'crunch',
+      'sit-up',
+      'sit up',
+      'ab ',
+      'abs',
+      'oblique',
+      'leg raise',
+    ])) {
+      groups.add('core');
+    }
+    if (_containsAny(text, ['calf'])) {
+      groups.add('calves');
+      groups.add('legs');
+    }
+
+    for (final entry in _muscleGroupAliases.entries) {
+      if (entry.value.any((alias) => text.contains(alias))) {
+        groups.add(entry.key);
+      }
+    }
+    return groups;
+  }
+
+  static bool _containsAny(String text, List<String> needles) {
+    return needles.any(text.contains);
+  }
+
+  static const List<String> _primaryMuscleGroups = [
+    'back',
+    'biceps',
+    'calves',
+    'cardio',
+    'chest',
+    'core',
+    'forearms',
+    'glutes',
+    'legs',
+    'shoulders',
+    'triceps',
+  ];
+
+  static const Map<String, List<String>> _muscleGroupAliases = {
+    'back': [
+      'back',
+      'lat',
+      'lats',
+      'spine',
+      'trap',
+      'traps',
+      'rhomboid',
+      'teres',
+    ],
+    'biceps': ['bicep', 'biceps', 'brachialis', 'curl', 'chin-up', 'chin up'],
+    'calves': ['calf', 'calves', 'gastrocnemius', 'soleus'],
+    'cardio': ['cardio', 'cardiovascular'],
+    'chest': [
+      'chest',
+      'pectoral',
+      'pectorals',
+      'pecs',
+      'bench',
+      'chest press',
+      'push-up',
+      'push up',
+      'fly',
+      'dip',
+    ],
+    'core': [
+      'abs',
+      'abdominals',
+      'core',
+      'oblique',
+      'obliques',
+      'waist',
+      'rectus abdominis',
+    ],
+    'forearms': ['forearm', 'forearms', 'wrist'],
+    'glutes': ['glute', 'glutes', 'gluteus', 'hip thrust'],
+    'legs': [
+      'leg',
+      'legs',
+      'quad',
+      'quads',
+      'quadriceps',
+      'hamstring',
+      'hamstrings',
+      'thigh',
+      'upper legs',
+      'lower legs',
+      'squat',
+      'lunge',
+      'deadlift',
+      'rdl',
+      'romanian',
+      'leg press',
+      'leg extension',
+      'leg curl',
+    ],
+    'shoulders': [
+      'shoulder',
+      'shoulders',
+      'delt',
+      'delts',
+      'deltoid',
+      'overhead press',
+      'lateral raise',
+      'rear delt',
+      'face pull',
+    ],
+    'triceps': ['tricep', 'triceps', 'pushdown', 'skull crusher'],
+  };
+
+  static const Map<String, String> _muscleGroupRepresentativeNames = {
+    'back': 'pulldown',
+    'biceps': 'curl',
+    'calves': 'calf',
+    'cardio': 'run',
+    'chest': 'bench',
+    'core': 'plank',
+    'forearms': 'wrist',
+    'glutes': 'hip thrust',
+    'legs': 'deadlift',
+    'shoulders': 'shoulder press',
+    'triceps': 'pushdown',
+  };
+
+  static const List<Map<String, dynamic>> _fallbackExercises = [
+    {
+      'name': 'Back Squat',
+      'bodyPart': 'upper legs',
+      'target': 'quads',
+      'equipment': 'barbell',
+      'variants': [
+        {'name': 'Back Squat', 'equipment': 'barbell', 'modifier': 'standard'},
+        {
+          'name': 'Pause Back Squat',
+          'equipment': 'barbell',
+          'modifier': 'pause reps',
+        },
+        {
+          'name': 'Tempo Back Squat',
+          'equipment': 'barbell',
+          'modifier': 'tempo',
+        },
+        {'name': 'Box Squat', 'equipment': 'barbell', 'modifier': 'box'},
+        {
+          'name': 'Pin Squat',
+          'equipment': 'barbell',
+          'modifier': 'pin / partial',
+        },
+        {
+          'name': 'Safety Squat Bar Squat',
+          'equipment': 'ssb',
+          'modifier': 'bar variation',
+        },
+        {
+          'name': 'Smith Machine Squat',
+          'equipment': 'smith machine',
+          'modifier': 'machine',
+        },
+      ],
+    },
+    {
+      'name': 'Front Squat',
+      'bodyPart': 'upper legs',
+      'target': 'quads',
+      'equipment': 'barbell',
+    },
+    {
+      'name': 'Leg Press',
+      'bodyPart': 'upper legs',
+      'target': 'quads',
+      'equipment': 'machine',
+    },
+    {
+      'name': 'Romanian Deadlift',
+      'bodyPart': 'upper legs',
+      'target': 'hamstrings',
+      'equipment': 'barbell',
+    },
+    {
+      'name': 'Leg Curl',
+      'bodyPart': 'upper legs',
+      'target': 'hamstrings',
+      'equipment': 'machine',
+    },
+    {
+      'name': 'Bench Press',
+      'bodyPart': 'chest',
+      'target': 'pectorals',
+      'equipment': 'barbell',
+      'variants': [
+        {
+          'name': 'Barbell Bench Press',
+          'equipment': 'barbell',
+          'modifier': 'standard',
+        },
+        {
+          'name': 'Pause Bench Press',
+          'equipment': 'barbell',
+          'modifier': 'pause reps',
+        },
+        {
+          'name': 'Close Grip Bench Press',
+          'equipment': 'barbell',
+          'modifier': 'close grip',
+        },
+        {
+          'name': 'Incline Barbell Bench Press',
+          'equipment': 'barbell',
+          'modifier': 'incline',
+        },
+        {
+          'name': 'Decline Barbell Bench Press',
+          'equipment': 'barbell',
+          'modifier': 'decline',
+        },
+        {
+          'name': 'Dumbbell Bench Press',
+          'equipment': 'dumbbell',
+          'modifier': 'dumbbell',
+        },
+        {
+          'name': 'Alternating Dumbbell Bench Press',
+          'equipment': 'dumbbell',
+          'modifier': 'alternating',
+        },
+        {
+          'name': 'Smith Machine Bench Press',
+          'equipment': 'smith machine',
+          'modifier': 'smith',
+        },
+        {
+          'name': 'Machine Chest Press',
+          'equipment': 'machine',
+          'modifier': 'machine',
+        },
+        {
+          'name': 'Tempo Bench Press',
+          'equipment': 'barbell',
+          'modifier': 'tempo',
+        },
+      ],
+    },
+    {
+      'name': 'Incline Bench Press',
+      'bodyPart': 'chest',
+      'target': 'pectorals',
+      'equipment': 'barbell',
+    },
+    {
+      'name': 'Dumbbell Fly',
+      'bodyPart': 'chest',
+      'target': 'pectorals',
+      'equipment': 'dumbbell',
+    },
+    {
+      'name': 'Cable Crossover',
+      'bodyPart': 'chest',
+      'target': 'pectorals',
+      'equipment': 'cable',
+    },
+    {
+      'name': 'Push Up',
+      'bodyPart': 'chest',
+      'target': 'pectorals',
+      'equipment': 'body weight',
+    },
+    {
+      'name': 'Deadlift',
+      'bodyPart': 'back',
+      'target': 'spine',
+      'equipment': 'barbell',
+      'variants': [
+        {
+          'name': 'Conventional Deadlift',
+          'equipment': 'barbell',
+          'modifier': 'standard',
+        },
+        {'name': 'Sumo Deadlift', 'equipment': 'barbell', 'modifier': 'stance'},
+        {
+          'name': 'Deficit Deadlift',
+          'equipment': 'barbell',
+          'modifier': 'deficit',
+        },
+        {
+          'name': 'Pause Deadlift',
+          'equipment': 'barbell',
+          'modifier': 'pause reps',
+        },
+        {
+          'name': 'Block Pull',
+          'equipment': 'barbell',
+          'modifier': 'block / partial',
+        },
+        {
+          'name': 'Rack Pull',
+          'equipment': 'barbell',
+          'modifier': 'rack / partial',
+        },
+        {
+          'name': 'Trap Bar Deadlift',
+          'equipment': 'trap bar',
+          'modifier': 'bar variation',
+        },
+        {
+          'name': 'Romanian Deadlift',
+          'equipment': 'barbell',
+          'modifier': 'hinge',
+        },
+      ],
+    },
+    {
+      'name': 'Pull Up',
+      'bodyPart': 'back',
+      'target': 'lats',
+      'equipment': 'body weight',
+      'variants': [
+        {'name': 'Pull Up', 'equipment': 'body weight', 'modifier': 'pronated'},
+        {
+          'name': 'Chin Up',
+          'equipment': 'body weight',
+          'modifier': 'supinated',
+        },
+        {
+          'name': 'Neutral Grip Pull Up',
+          'equipment': 'body weight',
+          'modifier': 'neutral grip',
+        },
+        {
+          'name': 'Wide Grip Pull Up',
+          'equipment': 'body weight',
+          'modifier': 'wide grip',
+        },
+        {
+          'name': 'Assisted Pull Up',
+          'equipment': 'machine',
+          'modifier': 'assisted',
+        },
+        {
+          'name': 'Weighted Pull Up',
+          'equipment': 'body weight',
+          'modifier': 'weighted',
+        },
+      ],
+    },
+    {
+      'name': 'Barbell Row',
+      'bodyPart': 'back',
+      'target': 'lats',
+      'equipment': 'barbell',
+      'variants': [
+        {'name': 'Barbell Row', 'equipment': 'barbell', 'modifier': 'standard'},
+        {
+          'name': 'Pendlay Row',
+          'equipment': 'barbell',
+          'modifier': 'floor reset',
+        },
+        {
+          'name': 'Underhand Barbell Row',
+          'equipment': 'barbell',
+          'modifier': 'supinated',
+        },
+        {
+          'name': 'Dumbbell Row',
+          'equipment': 'dumbbell',
+          'modifier': 'unilateral',
+        },
+        {
+          'name': 'Chest Supported Row',
+          'equipment': 'machine',
+          'modifier': 'supported',
+        },
+        {'name': 'T-Bar Row', 'equipment': 'machine', 'modifier': 'machine'},
+      ],
+    },
+    {
+      'name': 'Lat Pulldown',
+      'bodyPart': 'back',
+      'target': 'lats',
+      'equipment': 'cable',
+      'variants': [
+        {
+          'name': 'Lat Pulldown',
+          'equipment': 'cable',
+          'modifier': 'normal grip',
+        },
+        {
+          'name': 'Wide Grip Lat Pulldown',
+          'equipment': 'cable',
+          'modifier': 'wide grip',
+        },
+        {
+          'name': 'Close Grip Lat Pulldown',
+          'equipment': 'cable',
+          'modifier': 'close grip',
+        },
+        {
+          'name': 'V-Grip Lat Pulldown',
+          'equipment': 'cable',
+          'modifier': 'v grip',
+        },
+        {
+          'name': 'Supinated Lat Pulldown',
+          'equipment': 'cable',
+          'modifier': 'supinated grip',
+        },
+        {
+          'name': 'Single-Arm Lat Pulldown',
+          'equipment': 'cable',
+          'modifier': 'unilateral',
+        },
+        {
+          'name': 'Kneeling Lat Pulldown',
+          'equipment': 'cable',
+          'modifier': 'kneeling',
+        },
+      ],
+    },
+    {
+      'name': 'Seated Cable Row',
+      'bodyPart': 'back',
+      'target': 'lats',
+      'equipment': 'cable',
+      'variants': [
+        {
+          'name': 'Seated Cable Row',
+          'equipment': 'cable',
+          'modifier': 'neutral grip',
+        },
+        {
+          'name': 'Wide Grip Seated Cable Row',
+          'equipment': 'cable',
+          'modifier': 'wide grip',
+        },
+        {
+          'name': 'Close Grip Seated Cable Row',
+          'equipment': 'cable',
+          'modifier': 'close grip',
+        },
+        {
+          'name': 'Single-Arm Cable Row',
+          'equipment': 'cable',
+          'modifier': 'unilateral',
+        },
+        {
+          'name': 'Chest Supported Cable Row',
+          'equipment': 'cable',
+          'modifier': 'supported',
+        },
+      ],
+    },
+    {
+      'name': 'Overhead Press',
+      'bodyPart': 'shoulders',
+      'target': 'delts',
+      'equipment': 'barbell',
+      'variants': [
+        {
+          'name': 'Barbell Overhead Press',
+          'equipment': 'barbell',
+          'modifier': 'strict',
+        },
+        {'name': 'Push Press', 'equipment': 'barbell', 'modifier': 'leg drive'},
+        {
+          'name': 'Seated Barbell Press',
+          'equipment': 'barbell',
+          'modifier': 'seated',
+        },
+        {
+          'name': 'Dumbbell Shoulder Press',
+          'equipment': 'dumbbell',
+          'modifier': 'dumbbell',
+        },
+        {
+          'name': 'Alternating Dumbbell Shoulder Press',
+          'equipment': 'dumbbell',
+          'modifier': 'alternating',
+        },
+        {
+          'name': 'Smith Machine Shoulder Press',
+          'equipment': 'smith machine',
+          'modifier': 'smith',
+        },
+        {
+          'name': 'Machine Shoulder Press',
+          'equipment': 'machine',
+          'modifier': 'machine',
+        },
+      ],
+    },
+    {
+      'name': 'Lateral Raise',
+      'bodyPart': 'shoulders',
+      'target': 'delts',
+      'equipment': 'dumbbell',
+    },
+    {
+      'name': 'Face Pull',
+      'bodyPart': 'shoulders',
+      'target': 'delts',
+      'equipment': 'cable',
+    },
+    {
+      'name': 'Barbell Curl',
+      'bodyPart': 'upper arms',
+      'target': 'biceps',
+      'equipment': 'barbell',
+    },
+    {
+      'name': 'Dumbbell Curl',
+      'bodyPart': 'upper arms',
+      'target': 'biceps',
+      'equipment': 'dumbbell',
+    },
+    {
+      'name': 'Hammer Curl',
+      'bodyPart': 'upper arms',
+      'target': 'biceps',
+      'equipment': 'dumbbell',
+    },
+    {
+      'name': 'Tricep Pushdown',
+      'bodyPart': 'upper arms',
+      'target': 'triceps',
+      'equipment': 'cable',
+      'variants': [
+        {
+          'name': 'Rope Tricep Pushdown',
+          'equipment': 'cable',
+          'modifier': 'rope',
+        },
+        {
+          'name': 'Straight Bar Tricep Pushdown',
+          'equipment': 'cable',
+          'modifier': 'straight bar',
+        },
+        {
+          'name': 'V-Bar Tricep Pushdown',
+          'equipment': 'cable',
+          'modifier': 'v bar',
+        },
+        {
+          'name': 'Single-Arm Tricep Pushdown',
+          'equipment': 'cable',
+          'modifier': 'unilateral',
+        },
+        {
+          'name': 'Reverse Grip Tricep Pushdown',
+          'equipment': 'cable',
+          'modifier': 'supinated',
+        },
+      ],
+    },
+    {
+      'name': 'Skull Crusher',
+      'bodyPart': 'upper arms',
+      'target': 'triceps',
+      'equipment': 'barbell',
+    },
+    {
+      'name': 'Close Grip Bench',
+      'bodyPart': 'upper arms',
+      'target': 'triceps',
+      'equipment': 'barbell',
+    },
+    {
+      'name': 'Plank',
+      'bodyPart': 'waist',
+      'target': 'abs',
+      'equipment': 'body weight',
+    },
+    {
+      'name': 'Crunch',
+      'bodyPart': 'waist',
+      'target': 'abs',
+      'equipment': 'body weight',
+    },
+    {
+      'name': 'Leg Raise',
+      'bodyPart': 'waist',
+      'target': 'abs',
+      'equipment': 'body weight',
+    },
+    {
+      'name': 'Calf Raise',
+      'bodyPart': 'lower legs',
+      'target': 'calves',
+      'equipment': 'barbell',
+    },
+    {
+      'name': 'Hip Thrust',
+      'bodyPart': 'upper legs',
+      'target': 'glutes',
+      'equipment': 'barbell',
+    },
+    {
+      'name': 'Lunge',
+      'bodyPart': 'upper legs',
+      'target': 'quads',
+      'equipment': 'body weight',
+    },
   ];
 }
 

@@ -116,85 +116,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   void _startEmptyWorkout() {
-    _beginWorkout();
-  }
-
-  void _showStartWorkoutSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: IronMindTheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'START WORKOUT',
-              style: GoogleFonts.bebasNeue(
-                color: IronMindTheme.textPrimary,
-                fontSize: 22,
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Kick off a blank session or pull your first exercise from the library.',
-              style: GoogleFonts.dmSans(
-                color: IronMindTheme.text2,
-                fontSize: 13,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _startEmptyWorkout();
-                },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: IronMindTheme.textPrimary,
-                  side: BorderSide(color: IronMindTheme.border2),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  'START BLANK SESSION',
-                  style: GoogleFonts.bebasNeue(
-                    fontSize: 18,
-                    letterSpacing: 1.3,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _openExerciseLibrary();
-                },
-                child: Text(
-                  'PICK FROM EXERCISE LIBRARY',
-                  style: GoogleFonts.bebasNeue(
-                    fontSize: 18,
-                    letterSpacing: 1.3,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    _openExerciseLibrary();
   }
 
   void _startRoutine(Map<String, dynamic> routine) {
@@ -444,9 +366,55 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   void _showCreateRoutineSheet() {
-    _showRoutineBuilderSheet(
-      context,
-      onCreated: () => setState(() => _routineRefreshTick++),
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: IronMindTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'NEW ROUTINE',
+              style: GoogleFonts.bebasNeue(
+                color: IronMindTheme.textPrimary,
+                fontSize: 22,
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _RoutineActionTile(
+              icon: Icons.edit_outlined,
+              title: 'Custom Routine',
+              subtitle: 'Build your own routine from the exercise library.',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _showRoutineBuilderSheet(
+                  context,
+                  onCreated: () => setState(() => _routineRefreshTick++),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            _RoutineActionTile(
+              icon: Icons.view_list_outlined,
+              title: 'Preset Routines',
+              subtitle: 'Browse starting points like 5x5, PPL, and full body.',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _showExploreSheet(
+                  context,
+                  onAdded: () => setState(() => _routineRefreshTick++),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -661,6 +629,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               onImportProgram: _showImportProgramSheet,
               onStartRoutine: _startRoutine,
               onOpenAiGenerator: _showAiWorkoutPrompt,
+              onOpenExerciseLibrary: _openExerciseLibrary,
             ),
           if (_resting)
             Positioned(
@@ -1986,6 +1955,7 @@ class _WorkoutHomeTab extends StatefulWidget {
   final VoidCallback onImportProgram;
   final ValueChanged<Map<String, dynamic>> onStartRoutine;
   final VoidCallback onOpenAiGenerator;
+  final VoidCallback onOpenExerciseLibrary;
 
   const _WorkoutHomeTab({
     super.key,
@@ -1994,6 +1964,7 @@ class _WorkoutHomeTab extends StatefulWidget {
     required this.onImportProgram,
     required this.onStartRoutine,
     required this.onOpenAiGenerator,
+    required this.onOpenExerciseLibrary,
   });
 
   @override
@@ -2042,7 +2013,7 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
             onTap: widget.onStartEmptyWorkout,
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 15),
+              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 14),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [IronMindTheme.accent, const Color(0xFF2D8FD4)],
@@ -2075,6 +2046,7 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
                     style: GoogleFonts.bebasNeue(
                       color: Colors.black,
                       fontSize: 20,
+                      height: 1,
                       letterSpacing: 2,
                     ),
                   ),
@@ -2099,7 +2071,7 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
                 child: _QuickStartButton(
                   label: 'EXERCISES',
                   icon: Icons.search,
-                  onTap: () => _showExploreSheet(context, onAdded: _load),
+                  onTap: widget.onOpenExerciseLibrary,
                 ),
               ),
               const SizedBox(width: 8),
@@ -2128,24 +2100,12 @@ class _WorkoutHomeTabState extends State<_WorkoutHomeTab> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: widget.onCreateRoutine,
-                  child: Text(
-                    '+ NEW',
-                    style: GoogleFonts.dmMono(
-                      color: IronMindTheme.accent,
-                      fontSize: 10,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
           const SizedBox(height: 10),
           if (_routines.isEmpty)
-            _EmptyRoutinesCard(onCreateRoutine: widget.onCreateRoutine)
+            const _EmptyRoutinesCard()
           else
             ..._routines.map(
               (r) => Padding(
@@ -2228,12 +2188,19 @@ class _QuickStartButton extends StatelessWidget {
                 children: [
                   Icon(icon, color: color, size: 14),
                   const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: GoogleFonts.bebasNeue(
-                      color: color,
-                      fontSize: 13,
-                      letterSpacing: 1.2,
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        style: GoogleFonts.bebasNeue(
+                          color: color,
+                          fontSize: 14,
+                          height: 1,
+                          letterSpacing: 1,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -2244,19 +2211,86 @@ class _QuickStartButton extends StatelessWidget {
 }
 
 class _EmptyRoutinesCard extends StatelessWidget {
-  final VoidCallback onCreateRoutine;
-  const _EmptyRoutinesCard({required this.onCreateRoutine});
+  const _EmptyRoutinesCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: IronMindTheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: IronMindTheme.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: IronMindTheme.accentDim,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.view_list_outlined,
+              color: IronMindTheme.accent,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No routines yet',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Use New Routine to create one or add a preset.',
+                  style: GoogleFonts.dmSans(
+                    color: IronMindTheme.text3,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutineActionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _RoutineActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onCreateRoutine,
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: IronMindTheme.surface,
+          color: IronMindTheme.surface2,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: IronMindTheme.border),
+          border: Border.all(color: IronMindTheme.border2),
         ),
         child: Row(
           children: [
@@ -2267,11 +2301,7 @@ class _EmptyRoutinesCard extends StatelessWidget {
                 color: IronMindTheme.accentDim,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(
-                Icons.add,
-                color: IronMindTheme.accent,
-                size: 18,
-              ),
+              child: Icon(icon, color: IronMindTheme.accent, size: 18),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -2279,20 +2309,20 @@ class _EmptyRoutinesCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Create your first routine',
+                    title,
                     style: GoogleFonts.dmSans(
                       color: IronMindTheme.textPrimary,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Save exercises, sets, and order for your go-to sessions.',
+                    subtitle,
                     style: GoogleFonts.dmSans(
                       color: IronMindTheme.text3,
                       fontSize: 11,
-                      height: 1.4,
+                      height: 1.35,
                     ),
                   ),
                 ],
@@ -4722,7 +4752,7 @@ class _ExploreSheetState extends State<_ExploreSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'EXPLORE ROUTINES',
+                        'PRESET ROUTINES',
                         style: GoogleFonts.bebasNeue(
                           color: IronMindTheme.textPrimary,
                           fontSize: 22,

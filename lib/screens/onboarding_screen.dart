@@ -37,7 +37,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String _goal = 'peak-strength';
   DateTime? _birthDate;
   String _gender = 'Male';
-  String _style = 'strength';
+  String _style = 'powerlifting';
   String _weakPoint = 'none';
   double _trainingDays = 4;
   double _sessionLength = 75;
@@ -53,22 +53,45 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   static const List<String> _equipmentOptions = [
     'Barbell',
+    'Safety Squat Bar',
+    'Duffalo Bar',
+    'Trap Bar',
+    'Swiss Bar',
     'Dumbbells',
     'Cable Machine',
-    'Safety Squat Bar',
     'Bands / Chains',
     'Leg Press',
     'Smith Machine',
     'Kettlebells',
   ];
 
-  static const List<_DropdownOption> _trainingStyleOptions = [
-    _DropdownOption(value: 'powerlifting', label: 'Powerlifting'),
-    _DropdownOption(value: 'powerbuilding', label: 'Powerbuilding'),
-    _DropdownOption(value: 'strength', label: 'General Strength'),
-    _DropdownOption(value: 'hypertrophy', label: 'Hypertrophy'),
-    _DropdownOption(value: 'bodybuilding', label: 'Bodybuilding'),
-    _DropdownOption(value: 'athletic', label: 'Athletic Performance'),
+  static const List<_ChoiceOption> _styleOptions = [
+    _ChoiceOption(
+      value: 'powerlifting',
+      title: 'Powerlifting',
+      subtitle:
+          'Prioritize squat, bench, deadlift, heavy singles, and meet-style strength.',
+      icon: Icons.fitness_center,
+    ),
+    _ChoiceOption(
+      value: 'bodybuilding',
+      title: 'Bodybuilding',
+      subtitle: 'Focus on physique, muscle groups, pump work, and symmetry.',
+      icon: Icons.accessibility_new,
+    ),
+    _ChoiceOption(
+      value: 'general-fitness',
+      title: 'General Fitness',
+      subtitle:
+          'Balance strength, conditioning, consistency, and overall health.',
+      icon: Icons.directions_run,
+    ),
+    _ChoiceOption(
+      value: 'hypertrophy',
+      title: 'Hypertrophy Based',
+      subtitle: 'Build muscle with progressive overload, volume, and recovery.',
+      icon: Icons.trending_up_rounded,
+    ),
   ];
 
   static const List<int> _heightFeetOptions = [4, 5, 6, 7];
@@ -146,43 +169,50 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Who Are You?',
       subtitle:
           'Start with the basics so IronMind feels like your training log, not a blank template.',
-      kicker: 'STEP 1 OF 7',
+      kicker: 'STEP 1 OF 9',
     ),
     _OnboardingStepMeta(
       title: 'Your Body',
       subtitle:
           'Weight and height anchor your progress tracking and relative strength calculations.',
-      kicker: 'STEP 2 OF 7',
+      kicker: 'STEP 2 OF 9',
     ),
     _OnboardingStepMeta(
       title: 'Training Goal',
       subtitle:
           'Choose the outcome this phase should prioritize before we tune the training details.',
-      kicker: 'STEP 3 OF 7',
+      kicker: 'STEP 3 OF 9',
+    ),
+    _OnboardingStepMeta(
+      title: 'Training Style',
+      subtitle: 'Tell IronMind what kind of training you actually want.',
+      kicker: 'STEP 4 OF 9',
     ),
     _OnboardingStepMeta(
       title: 'Current Maxes',
-      subtitle:
-          'Current 1RMs power the load calculator, scheme suggestions, and PR board from day one.',
-      kicker: 'STEP 4 OF 7',
+      subtitle: '',
+      kicker: 'STEP 5 OF 9',
     ),
     _OnboardingStepMeta(
       title: 'Goal Maxes',
-      subtitle:
-          'Now load the bar you are chasing. These targets drive dashboard progress.',
-      kicker: 'STEP 5 OF 7',
+      subtitle: '',
+      kicker: 'STEP 6 OF 9',
     ),
     _OnboardingStepMeta(
       title: 'Training Setup',
-      subtitle:
-          'Experience, frequency, and equipment shape your program structure and intensity.',
-      kicker: 'STEP 6 OF 7',
+      subtitle: 'Experience and schedule are enough to shape the first pass.',
+      kicker: 'STEP 7 OF 9',
+    ),
+    _OnboardingStepMeta(
+      title: 'Equipment',
+      subtitle: 'Select what you can train with most weeks.',
+      kicker: 'STEP 8 OF 9',
     ),
     _OnboardingStepMeta(
       title: 'Your Program',
       subtitle:
           'Here\'s what IronMind built from your answers - ready to train.',
-      kicker: 'STEP 7 OF 7',
+      kicker: 'STEP 9 OF 9',
     ),
   ];
 
@@ -234,7 +264,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _goal = _normalizeGoal(
           current['goal']?.toString() ?? current['trainingGoal']?.toString(),
         );
-        _style = _normalizeStyle(current['style']?.toString());
+        _style = _normalizeStyle(
+          current['style']?.toString() ?? current['trainingStyle']?.toString(),
+        );
         _weakPoint = current['weakpoint']?.toString() ?? _weakPoint;
         _trainingDays =
             (current['trainingDays'] as num?)?.toDouble() ?? _trainingDays;
@@ -276,6 +308,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     current['height'] = heightTotalInches > 0 ? '$heightTotalInches' : '';
     current['goalWeight'] = _targetWeightController.text.trim();
     current['style'] = _style;
+    current['trainingStyle'] = _styleDisplayLabel(_style);
     current['weakpoint'] = _weakPoint;
     current['trainingDays'] = _trainingDays.round();
     current['sessionLength'] = _sessionLength.round();
@@ -355,11 +388,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error, style: GoogleFonts.dmSans(fontSize: 13)),
-          backgroundColor: IronMindColors.surfaceElevated,
+          content: Row(
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: IronMindColors.background,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  error,
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.background,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: IronMindColors.warning,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
           ),
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         ),
@@ -409,90 +461,109 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ? const Center(
                 child: CircularProgressIndicator(color: IronMindColors.accent),
               )
-            : Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'WELCOME TO IRONMIND',
-                      style: GoogleFonts.bebasNeue(
-                        color: IronMindColors.textPrimary,
-                        fontSize: 36,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 8,
-                        backgroundColor: IronMindColors.surface,
-                        color: IronMindColors.accent,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '${_step + 1} / ${_steps.length}',
-                      style: GoogleFonts.dmMono(
-                        color: IronMindColors.textMuted,
-                        fontSize: 11,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        child: _OnboardingStepShell(
-                          key: ValueKey(_step),
-                          meta: meta,
-                          child: _buildStepContent(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact =
+                      constraints.maxWidth < 380 || constraints.maxHeight < 720;
+                  final pagePadding = EdgeInsets.fromLTRB(
+                    compact ? 14 : 24,
+                    compact ? 10 : 20,
+                    compact ? 14 : 24,
+                    compact ? 12 : 24,
+                  );
+                  final sectionGap = compact ? 10.0 : 18.0;
+
+                  return Padding(
+                    padding: pagePadding,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (_step > 0)
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: _saving ? null : _previousStep,
-                              child: Text(
-                                'BACK',
-                                style: GoogleFonts.bebasNeue(
-                                  letterSpacing: 1.4,
-                                ),
-                              ),
+                        Text(
+                          'WELCOME TO IRONMIND',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.bebasNeue(
+                            color: IronMindColors.textPrimary,
+                            fontSize: compact ? 30 : 36,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                        SizedBox(height: compact ? 10 : 18),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: compact ? 6 : 8,
+                            backgroundColor: IronMindColors.surface,
+                            color: IronMindColors.accent,
+                          ),
+                        ),
+                        SizedBox(height: compact ? 8 : 12),
+                        Text(
+                          '${_step + 1} / ${_steps.length}',
+                          style: GoogleFonts.dmMono(
+                            color: IronMindColors.textMuted,
+                            fontSize: 11,
+                          ),
+                        ),
+                        SizedBox(height: sectionGap),
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            child: _OnboardingStepShell(
+                              key: ValueKey(_step),
+                              meta: meta,
+                              compact: compact,
+                              child: _buildStepContent(),
                             ),
                           ),
-                        if (_step > 0) const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton(
-                            onPressed: _saving ? null : _nextStep,
-                            child: _saving
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text(
-                                    _step == _steps.length - 1
-                                        ? 'START TRAINING'
-                                        : 'CONTINUE',
+                        ),
+                        SizedBox(height: sectionGap),
+                        Row(
+                          children: [
+                            if (_step > 0)
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: _saving ? null : _previousStep,
+                                  child: Text(
+                                    'BACK',
                                     style: GoogleFonts.bebasNeue(
-                                      letterSpacing: 1.5,
+                                      letterSpacing: 1.4,
                                     ),
                                   ),
-                          ),
+                                ),
+                              ),
+                            if (_step > 0) SizedBox(width: compact ? 8 : 12),
+                            Expanded(
+                              flex: 2,
+                              child: ElevatedButton(
+                                onPressed: _saving ? null : _nextStep,
+                                child: _saving
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Text(
+                                        _step == _steps.length - 1
+                                            ? 'START TRAINING'
+                                            : 'CONTINUE',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.bebasNeue(
+                                          letterSpacing: 1.5,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
       ),
     );
@@ -527,18 +598,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         progression = 'Add weight every 1-2 sessions';
     }
 
-    switch (_goal) {
-      case 'peak-strength':
-        style = 'Powerlifting - low rep, heavy compound focus';
+    switch (_style) {
+      case 'bodybuilding':
+        style = 'Bodybuilding - physique and muscle-group focus';
+        break;
+      case 'general-fitness':
+        style = 'General fitness - balanced strength and conditioning';
         break;
       case 'hypertrophy':
-        style = 'Powerbuilding - strength base with hypertrophy volume';
+        style = 'Hypertrophy based - progressive volume and recovery';
         break;
-      case 'lose-fat':
-        style = 'Strength + conditioning hybrid';
-        break;
+      case 'powerlifting':
       default:
-        style = 'General strength - balanced compound work';
+        style = 'Powerlifting - squat, bench, deadlift focus';
     }
 
     return {
@@ -776,46 +848,70 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
       case 3:
         return SingleChildScrollView(
-          child: _BarbellLiftInput(
-            title: 'CURRENT 1RM',
-            helper:
-                'Pick a lift, then load the bar to match your current best single or closest estimate.',
-            activeLift: _activeCurrentLift,
-            values: {
-              'squat': _liftValue('squat', target: false),
-              'bench': _liftValue('bench', target: false),
-              'deadlift': _liftValue('deadlift', target: false),
-              'ohp': _liftValue('ohp', target: false),
-            },
-            onLiftSelected: (lift) => setState(() => _activeCurrentLift = lift),
-            onWeightChanged: (weight) => setState(
-              () => _setLiftValue(_activeCurrentLift, weight, target: false),
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'TRAINING STYLE',
+                style: GoogleFonts.dmMono(
+                  color: IronMindColors.textMuted,
+                  fontSize: 9,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ..._styleOptions.map(
+                (option) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _SelectionCard(
+                    title: option.title,
+                    subtitle: option.subtitle,
+                    icon: option.icon,
+                    selected: _style == option.value,
+                    onTap: () => setState(() => _style = option.value),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
 
       case 4:
-        return SingleChildScrollView(
-          child: _BarbellLiftInput(
-            title: 'GOAL 1RM',
-            helper:
-                'Load the bar you want to own. These targets become your strength progress goals.',
-            activeLift: _activeGoalLift,
-            values: {
-              'squat': _liftValue('squat', target: true),
-              'bench': _liftValue('bench', target: true),
-              'deadlift': _liftValue('deadlift', target: true),
-              'ohp': _liftValue('ohp', target: true),
-            },
-            onLiftSelected: (lift) => setState(() => _activeGoalLift = lift),
-            onWeightChanged: (weight) => setState(
-              () => _setLiftValue(_activeGoalLift, weight, target: true),
-            ),
+        return _BarbellLiftInput(
+          title: 'CURRENT 1RM',
+          helper: 'Pick a lift, then add weight to the bar.',
+          activeLift: _activeCurrentLift,
+          values: {
+            'squat': _liftValue('squat', target: false),
+            'bench': _liftValue('bench', target: false),
+            'deadlift': _liftValue('deadlift', target: false),
+            'ohp': _liftValue('ohp', target: false),
+          },
+          onLiftSelected: (lift) => setState(() => _activeCurrentLift = lift),
+          onWeightChanged: (weight) => setState(
+            () => _setLiftValue(_activeCurrentLift, weight, target: false),
           ),
         );
 
-      // Step 5: Training Setup
       case 5:
+        return _BarbellLiftInput(
+          title: 'GOAL 1RM',
+          helper: 'Pick a lift, then add weight to the bar.',
+          activeLift: _activeGoalLift,
+          values: {
+            'squat': _liftValue('squat', target: true),
+            'bench': _liftValue('bench', target: true),
+            'deadlift': _liftValue('deadlift', target: true),
+            'ohp': _liftValue('ohp', target: true),
+          },
+          onLiftSelected: (lift) => setState(() => _activeGoalLift = lift),
+          onWeightChanged: (weight) => setState(
+            () => _setLiftValue(_activeGoalLift, weight, target: true),
+          ),
+        );
+
+      // Step 6: Training Setup
+      case 6:
         return SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -861,26 +957,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 suffix: '${_sessionLength.round()} min',
                 onChanged: (v) => setState(() => _sessionLength = v),
               ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _style,
-                dropdownColor: IronMindColors.surface,
-                decoration: const InputDecoration(labelText: 'Training Style'),
-                items: _trainingStyleOptions
-                    .map(
-                      (o) => DropdownMenuItem(
-                        value: o.value,
-                        child: Text(o.label),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setState(() => _style = v);
-                },
-              ),
-              const SizedBox(height: 16),
+            ],
+          ),
+        );
+
+      // Step 7: Equipment
+      case 7:
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                'EQUIPMENT',
+                'GYM ACCESS',
                 style: GoogleFonts.dmMono(
                   color: IronMindColors.textMuted,
                   fontSize: 9,
@@ -912,44 +1000,42 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 },
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _equipmentOptions.map((item) {
-                  final sel = _equipment.contains(item);
-                  return FilterChip(
-                    label: Text(item),
-                    selected: sel || _fullGymAccess,
-                    selectedColor: IronMindColors.accent.withValues(
-                      alpha: 0.18,
-                    ),
-                    checkmarkColor: IronMindColors.accent,
-                    side: const BorderSide(color: IronMindColors.border),
-                    labelStyle: GoogleFonts.dmSans(
-                      color: sel || _fullGymAccess
-                          ? IronMindColors.textPrimary
-                          : IronMindColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                    onSelected: (v) {
-                      setState(() {
-                        _fullGymAccess = false;
-                        if (v) {
-                          _equipment.add(item);
-                        } else {
-                          _equipment.remove(item);
-                        }
-                      });
-                    },
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final tileWidth = ((constraints.maxWidth - 10) / 2)
+                      .clamp(118.0, 160.0)
+                      .toDouble();
+                  return Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: _equipmentOptions.map((item) {
+                      final sel = _equipment.contains(item);
+                      return _EquipmentTile(
+                        width: tileWidth,
+                        label: item,
+                        icon: _equipmentIcon(item),
+                        selected: sel || _fullGymAccess,
+                        onTap: () {
+                          setState(() {
+                            _fullGymAccess = false;
+                            if (sel) {
+                              _equipment.remove(item);
+                            } else {
+                              _equipment.add(item);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
                   );
-                }).toList(),
+                },
               ),
             ],
           ),
         );
 
-      // Step 6: Program Preview
-      case 6:
+      // Step 8: Program Preview
+      case 8:
         final preview = _buildProgramPreview();
         final squat = _liftValue('squat', target: false).toDouble();
         final bench = _liftValue('bench', target: false).toDouble();
@@ -1194,13 +1280,179 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _pickBirthDate() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
+    final initial = _birthDate ?? DateTime(now.year - 25, now.month, now.day);
+    var selectedYear = initial.year.clamp(1940, now.year).toInt();
+    var selectedMonth = initial.month;
+    var selectedDay = initial.day;
+
+    void clampDateParts() {
+      final maxMonth = selectedYear == now.year ? now.month : 12;
+      selectedMonth = selectedMonth.clamp(1, maxMonth).toInt();
+      final maxDay = selectedYear == now.year && selectedMonth == now.month
+          ? now.day
+          : _daysInMonth(selectedYear, selectedMonth);
+      selectedDay = selectedDay.clamp(1, maxDay).toInt();
+    }
+
+    clampDateParts();
+
+    final picked = await showModalBottomSheet<DateTime>(
       context: context,
-      initialDate: _birthDate ?? DateTime(now.year - 25, now.month, now.day),
-      firstDate: DateTime(1940),
-      lastDate: now,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final years = List<int>.generate(
+              now.year - 1940 + 1,
+              (index) => now.year - index,
+            );
+            final monthCount = selectedYear == now.year ? now.month : 12;
+            final months = List<int>.generate(monthCount, (index) => index + 1);
+            final dayCount =
+                selectedYear == now.year && selectedMonth == now.month
+                ? now.day
+                : _daysInMonth(selectedYear, selectedMonth);
+            final days = List<int>.generate(dayCount, (index) => index + 1);
+            final selectedDate = DateTime(
+              selectedYear,
+              selectedMonth,
+              selectedDay,
+            );
+            final age = _ageForDate(selectedDate);
+
+            return SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                decoration: const BoxDecoration(
+                  color: IronMindColors.surface,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: IronMindColors.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'BIRTH DATE',
+                      style: GoogleFonts.bebasNeue(
+                        color: IronMindColors.textPrimary,
+                        fontSize: 24,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      age == null
+                          ? 'Select month, day, and year.'
+                          : 'Age: $age',
+                      style: GoogleFonts.dmSans(
+                        color: IronMindColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: _BirthDateDropdown(
+                            label: 'Month',
+                            value: selectedMonth,
+                            items: months,
+                            itemLabel: _monthLabel,
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setModalState(() {
+                                selectedMonth = value;
+                                clampDateParts();
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 3,
+                          child: _BirthDateDropdown(
+                            label: 'Day',
+                            value: selectedDay,
+                            items: days,
+                            itemLabel: (day) => '$day',
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setModalState(() {
+                                selectedDay = value;
+                                clampDateParts();
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 4,
+                          child: _BirthDateDropdown(
+                            label: 'Year',
+                            value: selectedYear,
+                            items: years,
+                            itemLabel: (year) => '$year',
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setModalState(() {
+                                selectedYear = value;
+                                clampDateParts();
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text(
+                              'CANCEL',
+                              style: GoogleFonts.bebasNeue(letterSpacing: 1.4),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton(
+                            onPressed: () =>
+                                Navigator.pop(context, selectedDate),
+                            child: Text(
+                              'SET DATE',
+                              style: GoogleFonts.bebasNeue(letterSpacing: 1.5),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
     if (picked == null) return;
+    if (!mounted) return;
     setState(() => _birthDate = picked);
   }
 
@@ -1213,13 +1465,40 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   int? _calculatedAge() {
     if (_birthDate == null) return null;
+    return _ageForDate(_birthDate!);
+  }
+
+  int? _ageForDate(DateTime date) {
     final now = DateTime.now();
-    var age = now.year - _birthDate!.year;
+    if (date.isAfter(now)) return null;
+    var age = now.year - date.year;
     final hasHadBirthday =
-        now.month > _birthDate!.month ||
-        (now.month == _birthDate!.month && now.day >= _birthDate!.day);
+        now.month > date.month ||
+        (now.month == date.month && now.day >= date.day);
     if (!hasHadBirthday) age -= 1;
     return age;
+  }
+
+  int _daysInMonth(int year, int month) {
+    return DateTime(year, month + 1, 0).day;
+  }
+
+  String _monthLabel(int month) {
+    const names = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return names[month - 1];
   }
 
   DateTime? _parseBirthDate(String? value) {
@@ -1309,24 +1588,59 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
+  String _styleDisplayLabel(String value) {
+    switch (value) {
+      case 'bodybuilding':
+        return 'Bodybuilding';
+      case 'general-fitness':
+        return 'General Fitness';
+      case 'hypertrophy':
+        return 'Hypertrophy Based';
+      case 'powerlifting':
+      default:
+        return 'Powerlifting';
+    }
+  }
+
   String _normalizeStyle(String? value) {
     switch ((value ?? '').trim().toLowerCase()) {
-      case 'powerlifting':
-        return 'powerlifting';
-      case 'powerbuilding':
-        return 'powerbuilding';
-      case 'hypertrophy / bodybuilding':
-      case 'hypertrophy':
-        return 'hypertrophy';
       case 'bodybuilding':
+      case 'body building':
         return 'bodybuilding';
-      case 'athletic':
-      case 'athletic performance':
-        return 'athletic';
-      case 'strength':
-      case 'general strength':
+      case 'general fitness':
+      case 'general-fitness':
+      case 'fitness':
+        return 'general-fitness';
+      case 'hypertrophy':
+      case 'hypertrophy based':
+      case 'hypertrophy-based':
+        return 'hypertrophy';
+      case 'powerlifting':
       default:
-        return 'strength';
+        return 'powerlifting';
+    }
+  }
+
+  IconData _equipmentIcon(String item) {
+    switch (item) {
+      case 'Dumbbells':
+      case 'Kettlebells':
+        return Icons.fitness_center;
+      case 'Cable Machine':
+        return Icons.cable_rounded;
+      case 'Bands / Chains':
+        return Icons.link_rounded;
+      case 'Leg Press':
+        return Icons.airline_seat_legroom_extra_rounded;
+      case 'Smith Machine':
+        return Icons.grid_4x4_rounded;
+      case 'Safety Squat Bar':
+      case 'Duffalo Bar':
+      case 'Trap Bar':
+      case 'Swiss Bar':
+      case 'Barbell':
+      default:
+        return Icons.horizontal_rule_rounded;
     }
   }
 
@@ -1400,11 +1714,54 @@ class _ChoiceOption {
   });
 }
 
-class _DropdownOption {
-  final String value;
+class _BirthDateDropdown extends StatelessWidget {
   final String label;
+  final int value;
+  final List<int> items;
+  final String Function(int) itemLabel;
+  final ValueChanged<int?> onChanged;
 
-  const _DropdownOption({required this.value, required this.label});
+  const _BirthDateDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.itemLabel,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<int>(
+      initialValue: value,
+      isExpanded: true,
+      dropdownColor: IronMindColors.surface,
+      decoration: InputDecoration(
+        labelText: label,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 12,
+        ),
+      ),
+      items: items
+          .map(
+            (item) => DropdownMenuItem<int>(
+              value: item,
+              child: Text(
+                itemLabel(item),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                  color: IronMindColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: onChanged,
+    );
+  }
 }
 
 class _HeightDropdown extends StatelessWidget {
@@ -1470,20 +1827,22 @@ class _HeightDropdown extends StatelessWidget {
 class _OnboardingStepShell extends StatelessWidget {
   final _OnboardingStepMeta meta;
   final Widget child;
+  final bool compact;
 
   const _OnboardingStepShell({
     super.key,
     required this.meta,
     required this.child,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(compact ? 14 : 20),
       decoration: BoxDecoration(
         color: IronMindColors.surface,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(compact ? 18 : 22),
         border: Border.all(color: IronMindColors.border),
       ),
       child: Column(
@@ -1493,29 +1852,35 @@ class _OnboardingStepShell extends StatelessWidget {
             meta.kicker,
             style: GoogleFonts.dmMono(
               color: IronMindColors.accent,
-              fontSize: 11,
+              fontSize: compact ? 10 : 11,
               letterSpacing: 1.3,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: compact ? 6 : 10),
           Text(
             meta.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.bebasNeue(
               color: IronMindColors.textPrimary,
-              fontSize: 30,
+              fontSize: compact ? 26 : 30,
               letterSpacing: 1.3,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            meta.subtitle,
-            style: GoogleFonts.dmSans(
-              color: IronMindColors.textSecondary,
-              fontSize: 14,
-              height: 1.45,
+          if (meta.subtitle.isNotEmpty) ...[
+            SizedBox(height: compact ? 6 : 8),
+            Text(
+              meta.subtitle,
+              maxLines: compact ? 2 : null,
+              overflow: compact ? TextOverflow.ellipsis : null,
+              style: GoogleFonts.dmSans(
+                color: IronMindColors.textSecondary,
+                fontSize: compact ? 12 : 14,
+                height: 1.45,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
+          ],
+          SizedBox(height: compact ? 12 : 18),
           Expanded(child: SingleChildScrollView(child: child)),
         ],
       ),
@@ -1677,6 +2042,89 @@ class _SelectionCard extends StatelessWidget {
   }
 }
 
+class _EquipmentTile extends StatelessWidget {
+  final double width;
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _EquipmentTile({
+    required this.width,
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        width: width,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: selected
+              ? IronMindColors.accent.withValues(alpha: 0.14)
+              : IronMindColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? IronMindColors.accent : IronMindColors.border,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: selected
+                    ? IronMindColors.accent.withValues(alpha: 0.18)
+                    : IronMindColors.surface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: selected
+                    ? IronMindColors.accent
+                    : IronMindColors.textSecondary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                  color: selected
+                      ? IronMindColors.textPrimary
+                      : IronMindColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  height: 1.15,
+                ),
+              ),
+            ),
+            if (selected) ...[
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.check_circle_rounded,
+                color: IronMindColors.accent,
+                size: 16,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SegmentedPicker extends StatelessWidget {
   final List<String> options;
   final String selected;
@@ -1802,22 +2250,34 @@ class _BarbellLiftInput extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: IronMindColors.surfaceElevated,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: IronMindColors.border),
           ),
-          child: Text(
-            helper,
-            style: GoogleFonts.dmSans(
-              color: IronMindColors.textSecondary,
-              fontSize: 12,
-              height: 1.45,
-            ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.add_circle_outline_rounded,
+                color: IronMindColors.accent,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  helper,
+                  style: GoogleFonts.dmSans(
+                    color: IronMindColors.textSecondary,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Text(
           title,
           style: GoogleFonts.dmMono(
@@ -1827,21 +2287,29 @@ class _BarbellLiftInput extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _lifts.map((lift) {
-            return _LiftPickerChip(
-              lift: lift,
-              value: values[lift.value] ?? 45,
-              selected: lift.value == activeLift,
-              onTap: () => onLiftSelected(lift.value),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final chipWidth = ((constraints.maxWidth - 8) / 2)
+                .clamp(116.0, 132.0)
+                .toDouble();
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _lifts.map((lift) {
+                return _LiftPickerChip(
+                  width: chipWidth,
+                  lift: lift,
+                  value: values[lift.value] ?? 45,
+                  selected: lift.value == activeLift,
+                  onTap: () => onLiftSelected(lift.value),
+                );
+              }).toList(),
             );
-          }).toList(),
+          },
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: IronMindColors.surfaceElevated,
             borderRadius: BorderRadius.circular(16),
@@ -1873,9 +2341,9 @@ class _BarbellLiftInput extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 16),
               _LoadedBarbell(weight: weight, color: active.color),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -1915,12 +2383,14 @@ class _LiftChoice {
 }
 
 class _LiftPickerChip extends StatelessWidget {
+  final double width;
   final _LiftChoice lift;
   final int value;
   final bool selected;
   final VoidCallback onTap;
 
   const _LiftPickerChip({
+    required this.width,
     required this.lift,
     required this.value,
     required this.selected,
@@ -1933,7 +2403,7 @@ class _LiftPickerChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        width: 132,
+        width: width,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: selected
